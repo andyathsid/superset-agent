@@ -1,0 +1,75 @@
+# Agent stack for a local Apache Superset Docker checkout.
+# Requires the external superset-agent-shared network and the
+# superset-postgres and superset-mcp aliases documented in README.md.
+
+name: superset-agent
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: superset-agent-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  superset-agent:
+    build: .
+    container_name: superset-agent-api
+    restart: unless-stopped
+    ports:
+      - "${PORT:-2026}:${PORT:-2026}"
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-superset_agent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-superset_agent_secret}
+      POSTGRES_HOST: superset-postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-superset_agent}
+
+      SUPERSET_MCP_URL: http://superset-mcp:5008/mcp
+
+      AEGRA_CONFIG: aegra.json
+      AUTH_TYPE: ${AUTH_TYPE:-noop}
+      PORT: ${PORT:-2026}
+
+      REDIS_BROKER_ENABLED: "true"
+      REDIS_URL: redis://redis:6379/0
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    networks:
+      - default
+      - agent_shared
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://localhost:${PORT:-2026}/health || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    volumes:
+      - ./src:/app/src:ro
+      - ./aegra.json:/app/aegra.json:ro
+
+volumes:
+  redis_data:
+
+networks:
+  agent_shared:
+    name: superset-agent-shared
+    external: true

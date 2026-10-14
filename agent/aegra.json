@@ -1,0 +1,9 @@
+{
+  "name": "superset-agent",
+  "dependencies": [
+    "./src"
+  ],
+  "graphs": {
+    "superset_agent": "./src/agent/agent.py:agent"
+  }
+}
