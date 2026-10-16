@@ -35,6 +35,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-superset_agent}
 
       SUPERSET_MCP_URL: http://superset-mcp:5008/mcp
+      OLLAMA_HOST: ${OLLAMA_DOCKER_HOST:-http://host.docker.internal:11434}
 
       AEGRA_CONFIG: aegra.json
       AUTH_TYPE: ${AUTH_TYPE:-noop}
@@ -46,6 +47,9 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
     networks:
       - default

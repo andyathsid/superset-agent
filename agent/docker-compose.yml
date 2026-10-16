@@ -54,6 +54,7 @@ services:
       - PORT=${PORT:-2026}
       - REDIS_BROKER_ENABLED=true
       - REDIS_URL=redis://redis:6379/0
+      - OLLAMA_HOST=${OLLAMA_DOCKER_HOST:-http://host.docker.internal:11434}
     depends_on:
       postgres:
         condition: service_healthy
