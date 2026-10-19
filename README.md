@@ -9,7 +9,19 @@ This project is a LangChain agent served by [Aegra](https://github.com/aegra/aeg
 - [uv](https://docs.astral.sh/uv/)
 - [Ollama](https://ollama.com/) for local inference, or an OpenRouter API key
 
-The examples below assume you cloned the [Apache Superset repository](https://github.com/apache/superset/tree/master) as sibling repositories like this:
+## Quick start
+
+### 1. Configure Superset
+
+Clone the [Apache Superset repository](https://github.com/apache/superset) next to this repository:
+
+```bash
+cd ..
+git clone https://github.com/apache/superset.git
+cd superset-agent
+```
+
+The two repositories should be sibling directories:
 
 ```text
 workspace/
@@ -17,21 +29,18 @@ workspace/
 └── superset-agent/
 ```
 
-Run the commands below from the `superset-agent` repository root unless a
-section explicitly says otherwise.
-
-## Quick start
-
-### 1. Configure Superset
-
-In Superset cloned repository, create `superset/docker/pythonpath_dev/superset_config_docker.py` with :
+In the cloned Superset repository, create
+`superset/docker/pythonpath_dev/superset_config_docker.py` with:
 
 ```python
 MCP_AUTH_ENABLED = False
 MCP_API_KEY_ENABLED = False
 MCP_DEV_USERNAME = "admin"
-MCP_RBAC_ENABLED = True
 ```
+
+Superset ignores this local override file. `MCP_DEV_USERNAME` must name an
+existing Superset user. The default Docker initialization creates the `admin`
+user used here.
 
 The non-development Compose configuration disables example loading by default.
 Create `superset/docker/.env-local`, which is also ignored by the Superset
@@ -41,10 +50,43 @@ repository, and enable the built-in examples before the first startup:
 SUPERSET_LOAD_EXAMPLES=yes
 ```
 
-Start Superset and its MCP service:
+Create `docker-compose.mcp.yml` in the Superset repository root:
+
+```yaml
+services:
+  superset-mcp:
+    build:
+      context: .
+      target: dev
+    command: ["superset", "mcp", "run", "--host", "0.0.0.0", "--port", "5008"]
+    user: "root"
+    restart: unless-stopped
+    ports:
+      - "5008:5008"
+    env_file:
+      - path: docker/.env
+        required: true
+      - path: docker/.env-local
+        required: false
+    depends_on:
+      superset-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./docker:/app/docker
+      - superset_home:/app/superset_home
+```
+
+This file joins the MCP container to the normal Superset Compose project
+network. Compose merges files in the order provided, so keep the Superset
+Compose file first and `docker-compose.mcp.yml` second.
+
+Build and start Superset together with the MCP service:
 
 ```bash
-docker compose -f ../superset/docker-compose-non-dev.yml up -d
+docker compose \
+  -f ../superset/docker-compose-non-dev.yml \
+  -f ../superset/docker-compose.mcp.yml \
+  up -d --build
 ```
 
 The one-shot `superset-init` service applies migrations, creates the default
@@ -53,10 +95,15 @@ The one-shot `superset-init` service applies migrations, creates the default
 Check its result with:
 
 ```bash
-docker compose -f ../superset/docker-compose-non-dev.yml \
+docker compose \
+  -f ../superset/docker-compose-non-dev.yml \
+  -f ../superset/docker-compose.mcp.yml \
   ps -a superset-init
-docker compose -f ../superset/docker-compose-non-dev.yml \
-  logs superset-init
+
+docker compose \
+  -f ../superset/docker-compose-non-dev.yml \
+  -f ../superset/docker-compose.mcp.yml \
+  logs superset-init superset-mcp
 ```
 
 Continue after `superset-init` exits with status `0`. Superset should then have
@@ -133,6 +180,8 @@ After Aegra is running, you can interact with the agent through [LangChain Agent
 - Deployment URL: `http://localhost:2026`
 - Assistant / Graph ID: `superset_agent`
 
+![LangChain Agent Chat UI connected to the local Superset agent](images/image.png)
+
 A LangSmith API key is not required when connecting to the local Aegra server.
 
 ## Local development
@@ -160,19 +209,47 @@ MCP_DEV_USERNAME = None
 MCP_RBAC_ENABLED = True
 ```
 
-`MCP_AUTH_ENABLED` controls JWT authentication. API-key authentication is enabled separately. Recreate the web and MCP services after changing the configuration if you build the services from previous quick start setup:
+`MCP_AUTH_ENABLED` controls JWT authentication. API-key authentication is
+enabled separately. If you started the services with the quick-start
+configuration, recreate the web and MCP services after changing this file:
 
 ```bash
-docker compose -f ../superset/docker-compose-non-dev.yml up -d \
+docker compose \
+  -f ../superset/docker-compose-non-dev.yml \
+  -f ../superset/docker-compose.mcp.yml \
+  up -d \
   --no-deps \
   --force-recreate \
   superset superset-mcp
 ```
 
+Verify that the MCP container loaded the Docker configuration and enabled authentication:
+
+```bash
+docker compose \
+  -f ../superset/docker-compose-non-dev.yml \
+  -f ../superset/docker-compose.mcp.yml \
+  exec superset-mcp \
+  test -f /app/docker/pythonpath_dev/superset_config_docker.py \
+  && echo "config mount OK"
+
+docker compose \
+  -f ../superset/docker-compose-non-dev.yml \
+  -f ../superset/docker-compose.mcp.yml \
+  logs superset-mcp 2>&1 \
+  | grep "Configured FastMCP instance" \
+  | tail -1
+```
+
+The final log line should include `auth=True`.
+
 Synchronize Superset's permission records after enabling the API-key feature:
 
 ```bash
-docker compose -f ../superset/docker-compose-non-dev.yml exec superset \
+docker compose \
+  -f ../superset/docker-compose-non-dev.yml \
+  -f ../superset/docker-compose.mcp.yml \
+  exec superset \
   superset init
 ```
 
@@ -224,14 +301,14 @@ Run the direct security example after completing the authenticated fixture setup
 ```bash
 cd agent
 E2E=1 uv run pytest -s \
-  tests/test_security_integration.py
+  tests/test_security.py
 ```
 
 The security test uses the `mcp_sales_na` API key and directly calls `list_datasets`. It checks that the sales datasets are visible and that `payroll` and `access_audit` are hidden. Direct MCP calls are used for authorization assertions because they do not depend on an LLM's wording or tool choice.
 
-## Deployment (WIP)
+## Shared compose stack (WIP)
 
-[`agent/compose.superset.yml`](agent/compose.superset.yml) runs Aegra against the cloned Superset checkout's PostgreSQL and MCP services. It expects an external network named `superset-agent-shared`, plus the `superset-postgres` and `superset-mcp` aliases in Superset's Compose file.
+[`agent/compose.superset.yml`](agent/compose.superset.yml) runs Aegra against the cloned Superset checkout's PostgreSQL and MCP services. It expects an external network named `superset-agent-shared`, plus the `superset-postgres` and `superset-mcp` aliases in the merged Superset Compose project.
 
 Create the network once:
 
@@ -239,9 +316,10 @@ Create the network once:
 docker network create superset-agent-shared
 ```
 
-A fresh Superset clone does not define those network aliases. In
-`superset/docker-compose-non-dev.yml`, change the `db` service to use the
-pgvector image and attach it to the shared network:
+A fresh Superset clone does not define those network aliases. Extend
+`superset/docker-compose.mcp.yml` with a `db` override and shared-network
+configuration. Keep the existing `superset-mcp` settings in that file and add
+the fields shown below:
 
 ```yaml
 services:
@@ -252,27 +330,15 @@ services:
       agent_shared:
         aliases:
           - superset-postgres
-```
 
-Attach the existing `superset-mcp` service to the same network:
-
-```yaml
-services:
   superset-mcp:
     networks:
       default:
       agent_shared:
         aliases:
           - superset-mcp
-```
 
-Declare the external network next to the existing `default` network:
-
-```yaml
 networks:
-  default:
-    # Keep the existing default network configuration.
-
   agent_shared:
     name: superset-agent-shared
     external: true
@@ -281,7 +347,10 @@ networks:
 Apply the Compose changes before starting the agent stack:
 
 ```bash
-docker compose -f ../superset/docker-compose-non-dev.yml up -d \
+docker compose \
+  -f ../superset/docker-compose-non-dev.yml \
+  -f ../superset/docker-compose.mcp.yml \
+  up -d \
   --force-recreate \
   db superset-mcp
 ```
