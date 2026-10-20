@@ -142,18 +142,6 @@ export const CloneThreadShell: FC<CloneThreadShellProps> = ({
               : "w-65 overflow-y-auto p-3",
           )}
         >
-          {wrapNewThreadTooltip ? (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger render={newThread} />
-                {sidebarCollapsed && (
-                  <TooltipContent side="right">New Thread</TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
-          ) : (
-            newThread
-          )}
           {sidebarContent !== undefined && (
             <div
               aria-hidden={sidebarCollapsed}
@@ -166,6 +154,19 @@ export const CloneThreadShell: FC<CloneThreadShellProps> = ({
               {sidebarContent}
             </div>
           )}
+          {wrapNewThreadTooltip ? (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger render={newThread} />
+                {sidebarCollapsed && (
+                  <TooltipContent side="right">New Thread</TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            newThread
+          )}
+
           {showSearch && hasThreads && (
             <div
               aria-hidden={sidebarCollapsed}

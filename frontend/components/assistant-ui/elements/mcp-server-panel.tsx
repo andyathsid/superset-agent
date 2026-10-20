@@ -34,6 +34,7 @@ export interface McpServer {
   transport: string;
   status: McpServerStatus;
   tools: readonly string[];
+  checkedAt?: string;
 }
 
 const DOT: Record<McpServerStatus, string> = {
@@ -50,30 +51,75 @@ const LABEL: Record<McpServerStatus, string> = {
   failed: "failed",
 };
 
-export function McpServerPanel({
-  servers,
-  expandedId,
-  onToggle,
-  onAuthorize,
-  className,
-  ...props
-}: Omit<
+
+function formatElapsedTime(value: string): string | undefined {
+  const checkedAt = new Date(value);
+  const elapsedSeconds = Math.max(
+    0,
+    Math.floor((Date.now() - checkedAt.getTime()) / 1_000),
+  );
+
+  if (Number.isNaN(checkedAt.getTime())) {
+    return undefined;
+  }
+
+  if (elapsedSeconds < 10) {
+    return "just now";
+  }
+
+  if (elapsedSeconds < 60) {
+    return `${elapsedSeconds}s ago`;
+  }
+
+  const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+  if (elapsedMinutes < 60) {
+    return `${elapsedMinutes}m ago`;
+  }
+
+  return `${Math.floor(elapsedMinutes / 60)}h ago`;
+}
+
+type McpServerPanelProps = Omit<
   ComponentProps<"div">,
-  "children" | "servers" | "expandedId" | "onToggle" | "onAuthorize"
+  | "children"
+  | "servers"
+  | "expandedId"
+  | "onToggle"
+  | "onAuthorize"
+  | "open"
+  | "onOpenChange"
 > & {
   servers: readonly McpServer[];
   expandedId?: string;
   onToggle?: (id: string) => void;
   onAuthorize?: (id: string) => void;
-}) {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+};
+
+export function McpServerPanel({
+  servers,
+  expandedId,
+  onToggle,
+  onAuthorize,
+  open,
+  onOpenChange,
+  className,
+  ...props
+}: McpServerPanelProps) {
+
   const toolScrollerRef = useRef<HTMLDivElement>(null);
+  const connectionDetailsScrollerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
     pointerId: number;
     startX: number;
     startScrollLeft: number;
+    scroller: HTMLDivElement;
   } | null>(null);
 
   const [showToolsDragHint, setShowToolsDragHint] = useState(false);
+  const [showConnectionDetailsDragHint, setShowConnectionDetailsDragHint] =
+    useState(false);
 
   const updateToolsDragHint = useCallback(() => {
     const scroller = toolScrollerRef.current;
@@ -86,55 +132,79 @@ export function McpServerPanel({
     setShowToolsDragHint(hasOverflow && hasNotReachedEnd);
   }, []);
 
-  useEffect(() => {
-    updateToolsDragHint();
-
-    const scroller = toolScrollerRef.current;
+  const updateConnectionDetailsDragHint = useCallback(() => {
+    const scroller = connectionDetailsScrollerRef.current;
     if (!scroller) return;
 
-    const observer = new ResizeObserver(updateToolsDragHint);
-    observer.observe(scroller);
+    const maxScrollLeft = scroller.scrollWidth - scroller.clientWidth;
+    const hasOverflow = maxScrollLeft > 1;
+    const hasNotReachedEnd = scroller.scrollLeft < maxScrollLeft - 1;
 
-    if (scroller.firstElementChild) {
-      observer.observe(scroller.firstElementChild);
+    setShowConnectionDetailsDragHint(hasOverflow && hasNotReachedEnd);
+  }, []);
+
+  useEffect(() => {
+    updateToolsDragHint();
+    updateConnectionDetailsDragHint();
+
+    const observer = new ResizeObserver(() => {
+      updateToolsDragHint();
+      updateConnectionDetailsDragHint();
+    });
+
+    for (const scroller of [
+      toolScrollerRef.current,
+      connectionDetailsScrollerRef.current,
+    ]) {
+      if (!scroller) continue;
+
+      observer.observe(scroller);
+      if (scroller.firstElementChild) {
+        observer.observe(scroller.firstElementChild);
+      }
     }
 
     return () => observer.disconnect();
-  }, [expandedId, updateToolsDragHint]);
+  }, [
+    expandedId,
+    updateConnectionDetailsDragHint,
+    updateToolsDragHint,
+  ]);
 
-  const connected = servers.filter(
-    (server) => server.status === "connected",
-  ).length;
+  const handleScrollerPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "touch") return;
 
-  const handleToolsPointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    const scroller = toolScrollerRef.current;
-    if (!scroller || event.pointerType === "touch") return;
+    const scroller = event.currentTarget;
 
     dragRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
       startScrollLeft: scroller.scrollLeft,
+      scroller,
     };
     scroller.setPointerCapture(event.pointerId);
   };
 
-  const handleToolsPointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    const scroller = toolScrollerRef.current;
+  const handleScrollerPointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
-    if (!scroller || !drag || drag.pointerId !== event.pointerId) return;
+    if (!drag || drag.pointerId !== event.pointerId) return;
 
-    scroller.scrollLeft = drag.startScrollLeft - (event.clientX - drag.startX);
+    drag.scroller.scrollLeft = drag.startScrollLeft - (event.clientX - drag.startX);
   };
 
-  const handleToolsPointerEnd = (event: PointerEvent<HTMLDivElement>) => {
+  const handleScrollerPointerEnd = (event: PointerEvent<HTMLDivElement>) => {
     if (dragRef.current?.pointerId !== event.pointerId) return;
     dragRef.current = null;
     event.currentTarget.releasePointerCapture(event.pointerId);
   };
 
+  const collapsibleState =
+    open === undefined ? { defaultOpen: false } : { open };
+
   return (
     <CollapsibleRoot
-      defaultOpen={false}
+      {...collapsibleState}
+      onOpenChange={onOpenChange}
       data-slot="mcp-server-panel"
       className={cn(
         paper,
@@ -143,23 +213,28 @@ export function McpServerPanel({
       )}
       {...props}
     >
-      <CollapsibleTrigger className="flex items-baseline gap-2 rounded-lg px-1 py-1 text-start outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
-        <span className="text-[13.5px] font-medium">Servers</span>
-        <span
+      <CollapsibleTrigger className="flex items-baseline gap-1 rounded-lg px-1 py-1 text-start outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+        <span className="text-[13.5px] font-medium">MCP Status</span>
+
+        {/* <span
           className={cn(
             mono,
             "text-muted-foreground min-w-0 flex-1 tabular-nums",
           )}
         >
           {connected} of {servers.length} connected
-        </span>
-        <ChevronDownIcon className="self-center text-muted-foreground size-3.5 shrink-0 -rotate-90 transition-transform duration-200 group-data-open/mcp-server-panel:rotate-0 motion-reduce:transition-none" />
+        </span> */}
+        <ChevronDownIcon className="self-center ml-auto text-muted-foreground size-3.5 shrink-0 -rotate-90 transition-transform duration-200 group-data-open/mcp-server-panel:rotate-0 motion-reduce:transition-none" />
       </CollapsibleTrigger>
 
       <CollapsibleContent className="overflow-hidden data-closed:animate-collapsible-up data-open:animate-collapsible-down">
-        <div className="flex flex-col gap-1 pt-1">
+        <div className="flex flex-col gap-2 pt-1">
           {servers.map((server) => {
             const expanded = expandedId === server.id;
+            const checkedAt = server.checkedAt;
+            const lastCheckedLabel = checkedAt
+              ? formatElapsedTime(checkedAt)
+              : undefined;
             const rowClassName = cn(
               "flex items-center gap-2.5 rounded-xl px-1.5 py-2 text-start",
               onToggle && "hover:bg-foreground/[0.04] transition-colors",
@@ -207,12 +282,66 @@ export function McpServerPanel({
                 {expanded && (
                   <div className="fade-in slide-in-from-top-1 animate-in flex flex-col gap-1.5 px-1.5 ps-8 pb-2 duration-200">
                     <div className="flex items-center gap-2">
-                      <span className={cn(mono, "text-muted-foreground")}>
-                        {server.transport}
-                      </span>
-                      <span className={cn(mono, "text-muted-foreground")}>
-                        · {LABEL[server.status]}
-                      </span>
+                      <div className="relative min-w-0 flex-1">
+                        <div
+                          ref={connectionDetailsScrollerRef}
+                          aria-label={`${server.name} connection details`}
+                          tabIndex={0}
+                          onScroll={updateConnectionDetailsDragHint}
+                          onPointerDown={handleScrollerPointerDown}
+                          onPointerMove={handleScrollerPointerMove}
+                          onPointerUp={handleScrollerPointerEnd}
+                          onPointerCancel={handleScrollerPointerEnd}
+                          className="w-full cursor-grab touch-pan-y select-none overflow-x-auto overflow-y-hidden overscroll-x-contain active:cursor-grabbing [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                        >
+                          <div className="flex w-max flex-nowrap items-center gap-1">
+                            <span
+                              className={cn(
+                                mono,
+                                "text-muted-foreground shrink-0",
+                              )}
+                            >
+                              {server.transport}
+                            </span>
+                            <span className="text-muted-foreground/60 shrink-0">
+                              ·
+                            </span>
+                            <span
+                              className={cn(
+                                mono,
+                                "text-muted-foreground shrink-0",
+                              )}
+                            >
+                              {LABEL[server.status]}
+                            </span>
+                            {checkedAt && lastCheckedLabel && (
+                              <>
+                                <span className="text-muted-foreground/60 shrink-0">
+                                  ·
+                                </span>
+                                <time
+                                  dateTime={checkedAt}
+                                  title={new Date(checkedAt).toLocaleString()}
+                                  className={cn(
+                                    mono,
+                                    "text-muted-foreground shrink-0",
+                                  )}
+                                >
+                                  last checked {lastCheckedLabel}
+                                </time>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        {showConnectionDetailsDragHint && (
+                          <div
+                            aria-hidden
+                            className="pointer-events-none absolute inset-y-0 right-0 flex w-9 items-center justify-end bg-gradient-to-l from-background via-background/80 to-transparent"
+                          >
+                            <GripHorizontalIcon className="text-muted-foreground/60 size-4" />
+                          </div>
+                        )}
+                      </div>
                       {server.status === "needs-auth" && onAuthorize && (
                         <button
                           type="button"
@@ -230,10 +359,10 @@ export function McpServerPanel({
                         aria-label={`${server.name} tools`}
                         tabIndex={0}
                         onScroll={updateToolsDragHint}
-                        onPointerDown={handleToolsPointerDown}
-                        onPointerMove={handleToolsPointerMove}
-                        onPointerUp={handleToolsPointerEnd}
-                        onPointerCancel={handleToolsPointerEnd}
+                        onPointerDown={handleScrollerPointerDown}
+                        onPointerMove={handleScrollerPointerMove}
+                        onPointerUp={handleScrollerPointerEnd}
+                        onPointerCancel={handleScrollerPointerEnd}
                         className="w-full cursor-grab touch-pan-y select-none overflow-x-auto overflow-y-hidden overscroll-x-contain pe-1 active:cursor-grabbing [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
                       >
                         <div className="flex w-max flex-nowrap gap-1">

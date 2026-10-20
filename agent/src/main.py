@@ -1,12 +1,15 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
-from agent.tools import close_shared_mcp_resources
+from agent.config import AgentSettings
+from agent.tools import close_shared_mcp_resources, probe_mcp_server
+from core.rate_limit import limiter
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from schemas.mcp import McpServerStatus, McpServerStatusResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from src.core.rate_limit import limiter
 
 
 @asynccontextmanager
@@ -34,6 +37,38 @@ async def _rate_limit_handler(_request: object, exc: RateLimitExceeded) -> JSONR
 @app.get("/")
 async def root() -> dict[str, str]:
     return {"message": "FastAPI is running!"}
+
+
+@app.get("/mcp-servers/status")
+async def get_mcp_server_status() -> McpServerStatusResponse:
+    """Return the latest safe-to-display status for configured MCP servers."""
+    settings = AgentSettings.from_env()
+
+
+    probe = await probe_mcp_server(
+        settings.superset_mcp_url,
+        (
+            settings.superset_mcp_api_key.get_secret_value()
+            if settings.superset_mcp_api_key
+            else None
+        ),
+    )
+
+    checked_at = datetime.now(UTC)
+
+    return McpServerStatusResponse(
+        checked_at=checked_at,
+        servers=[
+            McpServerStatus(
+                id="superset",
+                name="Superset",
+                transport="HTTP",
+                status=probe["status"],
+                tools=probe["tools"],
+                checked_at=checked_at,
+            )
+        ],
+    )
 
 
 # # All auth endpoints live under /api/v1/auth (no JWT required).

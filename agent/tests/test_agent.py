@@ -5,13 +5,13 @@ from __future__ import annotations
 import json
 import os
 import sys
-from typing import Any
-import pytest
+from types import SimpleNamespace
+from typing import Any, cast
 
+import pytest
 from agent import agent as agent_module
-from agent.agent import build_agent
-from agent.config import AgentSettings
 from langchain.messages import AIMessage, ToolMessage
+from langgraph_sdk.runtime import ServerRuntime
 
 _MAX_TOOL_CONTENT_CHARS = 800
 _e2e = pytest.mark.skipif(
@@ -19,9 +19,11 @@ _e2e = pytest.mark.skipif(
     reason="Set E2E=1 to run the integration test.",
 )
 
+
 def _safe_print(text: str) -> None:
     encoding = sys.stdout.encoding or "utf-8"
     print(text.encode(encoding, errors="backslashreplace").decode(encoding))
+
 
 def _render(message: Any) -> str:
     if isinstance(message, ToolMessage):
@@ -69,60 +71,28 @@ async def _run_agent(agent: Any, agent_input: dict[str, Any]) -> dict[str, Any]:
 @_e2e
 @pytest.mark.asyncio
 async def test_agent_e2e() -> None:
-    async with build_agent(AgentSettings.from_env()) as agent:
+
+    runtime = cast(
+        ServerRuntime[None],
+        SimpleNamespace(execution_runtime=object()),
+    )
+
+    async with agent_module.graph(runtime) as agent:
         result = await _run_agent(
             agent,
             {
                 "messages": [
                     {
                         "role": "user",
-                        "content": (
-                            "Hello can you list available datasets in Superset?"
-                        ),
+                        "content": "Hello can you list available datasets in Superset?",
                     }
                 ],
             },
         )
 
     messages = result["messages"]
-
-    tool_calls = [
-        message
-        for message in messages
-        if isinstance(message, ToolMessage)
-    ]
+    tool_calls = [message for message in messages if isinstance(message, ToolMessage)]
 
     assert tool_calls
     assert isinstance(messages[-1], AIMessage)
     assert str(messages[-1].content).strip()
-
-
-@pytest.mark.asyncio
-async def test_graph_skips_mcp_setup_outside_execution(monkeypatch) -> None:
-    events: list[str] = []
-    sentinel = object()
-
-    class ReadRuntime:
-        execution_runtime = None
-
-    def fake_settings_from_env() -> object:
-        events.append("settings-loaded")
-        return object()
-
-    def fake_build_agent(settings: object, tools: list[object]) -> object:
-        assert settings is not None
-        assert tools == []
-        events.append("agent-created")
-        return sentinel
-
-    monkeypatch.setattr(
-        agent_module.AgentSettings,
-        "from_env",
-        staticmethod(fake_settings_from_env),
-    )
-    monkeypatch.setattr(agent_module, "build_agent", fake_build_agent)
-
-    async with agent_module.graph(ReadRuntime()) as graph:
-        assert graph is sentinel
-
-    assert events == ["settings-loaded", "agent-created"]

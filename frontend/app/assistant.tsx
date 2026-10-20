@@ -9,41 +9,15 @@ import { Client } from "@langchain/langgraph-sdk";
 import { useMemo, useState } from "react";
 import { Thread } from "@/components/assistant-ui/elements/thread.aui";
 import { CloneThreadShell } from "@/components/assistant-ui/elements/clone-thread-shell";
-import {
-  McpServerPanel,
-  type McpServer,
-} from "@/components/assistant-ui/elements/mcp-server-panel";
+import { McpServerPanel } from "@/components/assistant-ui/elements/mcp-server-panel";
 import { createLangGraphThreadListAdapter } from "@/app/lib/assistant/langgraph-thread-list-adapter";
 import { sidebarCollapsedCookie } from "@/app/lib/cookies/definitions";
 import { writeClientCookie } from "@/app/lib/cookies/client";
+import { useMcpServerStatus } from "@/app/lib/assistant/use-mcp-server-status";
 
 type AssistantProps = {
   defaultSidebarCollapsed: boolean;
 };
-
-const mcpServers: readonly McpServer[] = [
-  {
-    id: "superset",
-    name: "Superset",
-    transport: "HTTP",
-    status: "connected",
-    tools: [
-      "query_sql",
-      "list_datasets",
-      ...Array.from(
-        { length: 50 },
-        (_, index) => `dummy_tool_${String(index + 1).padStart(2, "0")}`,
-      ),
-    ],
-  },
-  {
-    id: "analytics",
-    name: "Analytics",
-    transport: "HTTP",
-    status: "connecting",
-    tools: ["search_metrics"],
-  },
-];
 
 export function Assistant({ defaultSidebarCollapsed }: AssistantProps) {
   const apiUrl =
@@ -66,7 +40,10 @@ export function Assistant({ defaultSidebarCollapsed }: AssistantProps) {
   });
 
   const [expandedServerId, setExpandedServerId] = useState<string>();
-
+  const [isMcpPanelOpen, setMcpPanelOpen] = useState(false);
+  const { servers: mcpServers} = useMcpServerStatus({
+    pollEnabled: isMcpPanelOpen,
+  });
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <CloneThreadShell
@@ -78,6 +55,8 @@ export function Assistant({ defaultSidebarCollapsed }: AssistantProps) {
           <McpServerPanel
             servers={mcpServers}
             expandedId={expandedServerId}
+            open={isMcpPanelOpen}
+            onOpenChange={setMcpPanelOpen}
             onToggle={(id) =>
               setExpandedServerId((current) =>
                 current === id ? undefined : id,

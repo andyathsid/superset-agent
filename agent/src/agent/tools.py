@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Literal, TypedDict
 
 import httpx2
 from fastmcp import Client as FastMCPClient
@@ -71,6 +72,63 @@ async def create_tools(
 
     async with MCPAdapter(client) as adapter:
         yield await adapter.list_tools(cache_mode="use")
+
+
+McpProbeStatus = Literal["connected", "needs-auth", "failed"]
+
+
+class McpServerProbe(TypedDict):
+    status: McpProbeStatus
+    tools: list[str]
+
+
+_MCP_STATUS_TIMEOUT = httpx2.Timeout(5.0)
+
+
+def _status_http_client_factory(
+    headers: dict[str, str] | None = None,
+    timeout: httpx2.Timeout | None = None,
+    auth: httpx2.Auth | None = None,
+    follow_redirects: bool = False,
+) -> httpx2.AsyncClient:
+    """Create a short-lived client for MCP status probes."""
+    return _http_client_factory(
+        headers=headers,
+        timeout=_MCP_STATUS_TIMEOUT,
+        auth=auth,
+        follow_redirects=follow_redirects,
+    )
+
+
+async def probe_mcp_server(
+    superset_mcp_url: str,
+    superset_mcp_api_key: str | None = None,
+) -> McpServerProbe:
+    """Return the current MCP availability without exposing connection details."""
+    transport = StreamableHttpTransport(
+        superset_mcp_url,
+        auth=superset_mcp_api_key,
+        httpx_client_factory=_status_http_client_factory,
+    )
+
+    client = FastMCPClient(transport, cache=_TOOL_CACHE)
+
+    try:
+        async with MCPAdapter(client) as adapter:
+            tools = await adapter.list_tools(cache_mode="refresh")
+    except httpx2.HTTPStatusError as error:
+        if error.response.status_code in {401, 403}:
+            return {"status": "needs-auth", "tools": []}
+        return {"status": "failed", "tools": []}
+    except httpx2.RequestError:
+        return {"status": "failed", "tools": []}
+    # except Exception:
+    #     return {"status": "failed", "tools": []}
+
+    return {
+        "status": "connected",
+        "tools": [tool.name for tool in tools],
+    }
 
 
 async def close_shared_mcp_resources() -> None:
