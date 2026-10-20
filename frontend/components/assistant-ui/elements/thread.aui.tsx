@@ -77,6 +77,7 @@ import {
   type ComponentProps,
   type FC,
   type PropsWithChildren,
+  type ReactNode,
 } from "react";
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
@@ -182,6 +183,7 @@ const taskAwareGroupBy = (
 export type ThreadProps = {
   components?: ThreadComponents | undefined;
   autoFocus?: boolean | undefined;
+  composerActions?: ReactNode;
 };
 
 const EMPTY_COMPONENTS: ThreadComponents = {};
@@ -226,20 +228,26 @@ const ThreadHistorySkeleton: FC = () => (
 export const Thread: FC<ThreadProps> = ({
   components = EMPTY_COMPONENTS,
   autoFocus = true,
+  composerActions,
 }) => {
   const isEmpty = useAuiState(isNewChatView);
 
   return (
     <ThreadComponentsContext.Provider value={components}>
-      <ThreadRoot isEmpty={isEmpty} autoFocus={autoFocus} />
+      <ThreadRoot
+        isEmpty={isEmpty}
+        autoFocus={autoFocus}
+        composerActions={composerActions}
+      />
     </ThreadComponentsContext.Provider>
   );
 };
 
-const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
-  isEmpty,
-  autoFocus,
-}) => {
+const ThreadRoot: FC<{
+  isEmpty: boolean;
+  autoFocus: boolean;
+  composerActions: ReactNode;
+}> = ({ isEmpty, autoFocus, composerActions }) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext);
 
   return (
@@ -291,7 +299,7 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
           >
             <ThreadScrollToBottom />
             <ThreadFollowupSuggestions />
-            <Composer autoFocus={autoFocus} />
+            <Composer autoFocus={autoFocus} composerActions={composerActions} />
             <AuiIf condition={(s) => isNewChatView(s) && s.composer.isEmpty}>
               <ThreadSuggestions />
             </AuiIf>
@@ -547,7 +555,10 @@ const ThreadSuggestionItem: FC = () => {
   );
 };
 
-const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
+const Composer: FC<{ autoFocus: boolean; composerActions?: ReactNode }> = ({
+  autoFocus,
+  composerActions,
+}) => {
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
       <ComposerPrimitive.AttachmentDropzone
@@ -567,13 +578,15 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
           enterKeyHint="send"
           aria-label="Message input"
         />
-        <ComposerAction />
+        <ComposerAction composerActions={composerActions} />
       </ComposerPrimitive.AttachmentDropzone>
     </ComposerPrimitive.Root>
   );
 };
 
-const ComposerAction: FC = () => {
+const ComposerAction: FC<{ composerActions?: ReactNode }> = ({
+  composerActions,
+}) => {
   // The stop control only cancels the send while no run it could stop is going.
   const isSending = useAuiState(
     (s) =>
@@ -583,7 +596,10 @@ const ComposerAction: FC = () => {
 
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between">
-      <ComposerAddAttachment />
+      <div className="flex items-center gap-1.5">
+        <ComposerAddAttachment />
+        {composerActions}
+      </div>
       <div className="flex items-center gap-1.5">
         <AuiIf condition={(s) => s.thread.capabilities.dictation}>
           <AuiIf condition={(s) => s.composer.dictation == null}>
