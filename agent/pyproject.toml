@@ -4,10 +4,12 @@ version = "0.1.0"
 requires-python = ">=3.12,<3.14"
 dependencies = [
     "aegra-cli>=0.10.8",
+    "httpx2>=2.13.1",
     "langchain[mcp]>=1.4.4",
     "langchain-ollama>=1.1.0",
     "langchain-openrouter>=0.2.9",
     "python-dotenv>=1.2.4",
+    "slowapi>=0.1.10",
 ]
 
 [build-system]
@@ -17,6 +19,9 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 module-name = "agent"
 module-root = "src"
+
+[tool.build.targets.wheel]
+packages = ["src"]
 
 [dependency-groups]
 dev = [

@@ -8,6 +8,7 @@ import sys
 from typing import Any
 import pytest
 
+from agent import agent as agent_module
 from agent.agent import build_agent
 from agent.config import AgentSettings
 from langchain.messages import AIMessage, ToolMessage
@@ -68,21 +69,20 @@ async def _run_agent(agent: Any, agent_input: dict[str, Any]) -> dict[str, Any]:
 @_e2e
 @pytest.mark.asyncio
 async def test_agent_e2e() -> None:
-    agent = await build_agent(AgentSettings.from_env())
-
-    result = await _run_agent(
-        agent,
-        {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": (
-                        "Hello! Can you check wether the Superset MCP service is up and running?"
-                    ),
-                }
-            ],
-        },
-    )
+    async with build_agent(AgentSettings.from_env()) as agent:
+        result = await _run_agent(
+            agent,
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": (
+                            "Hello can you list available datasets in Superset?"
+                        ),
+                    }
+                ],
+            },
+        )
 
     messages = result["messages"]
 
@@ -95,3 +95,34 @@ async def test_agent_e2e() -> None:
     assert tool_calls
     assert isinstance(messages[-1], AIMessage)
     assert str(messages[-1].content).strip()
+
+
+@pytest.mark.asyncio
+async def test_graph_skips_mcp_setup_outside_execution(monkeypatch) -> None:
+    events: list[str] = []
+    sentinel = object()
+
+    class ReadRuntime:
+        execution_runtime = None
+
+    def fake_settings_from_env() -> object:
+        events.append("settings-loaded")
+        return object()
+
+    def fake_build_agent(settings: object, tools: list[object]) -> object:
+        assert settings is not None
+        assert tools == []
+        events.append("agent-created")
+        return sentinel
+
+    monkeypatch.setattr(
+        agent_module.AgentSettings,
+        "from_env",
+        staticmethod(fake_settings_from_env),
+    )
+    monkeypatch.setattr(agent_module, "build_agent", fake_build_agent)
+
+    async with agent_module.graph(ReadRuntime()) as graph:
+        assert graph is sentinel
+
+    assert events == ["settings-loaded", "agent-created"]

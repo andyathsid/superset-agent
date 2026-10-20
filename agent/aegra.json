@@ -5,5 +5,8 @@
   ],
   "graphs": {
     "superset_agent": "./src/agent/agent.py:agent"
+  },
+  "http": {
+    "app": "./src/main.py:app"
   }
 }
