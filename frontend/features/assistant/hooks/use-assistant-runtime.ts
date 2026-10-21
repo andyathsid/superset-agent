@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import type { RemoteThreadListAdapter } from "@assistant-ui/react";
-import { useStreamRuntime } from "@assistant-ui/react-langchain";
+import { useBranchRuntime } from "../runtime/use-branch-runtime";
 import { Client } from "@langchain/langgraph-sdk";
 import { createLangGraphThreadListAdapter } from "../runtime/langgraph-thread-list-adapter";
 import { useModels } from "../components/model-provider";
@@ -30,7 +30,7 @@ export function useAssistantRuntime() {
     [client],
   );
 
-  const runtime = useStreamRuntime({
+  const runtime = useBranchRuntime({
     assistantId: process.env.NEXT_PUBLIC_LANGGRAPH_ASSISTANT_ID!,
     apiUrl,
     fetch: modelFetch,

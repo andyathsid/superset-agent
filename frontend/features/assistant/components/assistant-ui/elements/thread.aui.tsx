@@ -80,6 +80,7 @@ import {
   type PropsWithChildren,
   type ReactNode,
 } from "react";
+import { SupersetLogo } from "@/features/workspace/components/logos";
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 
@@ -516,8 +517,15 @@ const ThreadScrollToBottom: FC = () => {
 
 const ThreadWelcome: FC = () => {
   return (
-    <div className="aui-thread-welcome-root mb-6 flex flex-col px-2">
-      <p className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-medium tracking-tight duration-200">
+    <div className="aui-thread-welcome-root fade-in slide-in-from-bottom-1 animate-in fill-mode-both mb-6 flex flex-col items-center gap-3 px-2 text-center duration-200">
+      <div className="flex items-center justify-center gap-3">
+        <SupersetLogo className="h-6 w-auto shrink-0 text-[#484848] dark:text-zinc-200" />
+        <h1 className="text-2xl font-medium tracking-tight">
+          Superset MCP Chatbot
+        </h1>
+      </div>
+
+      <p className="aui-thread-welcome-message-inner text-muted-foreground text-sm">
         What would you like to explore in Superset?
       </p>
     </div>

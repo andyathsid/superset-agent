@@ -49,8 +49,16 @@ export function ModelThreadProvider({ children }: { children: ReactNode }) {
       if (!nextId) continue;
       pendingBindings.current.delete(id);
       const bound = { ...event, beforeMessageId: nextId };
-      setEventsByThread((current) => ({ ...current, [threadId]: (current[threadId] ?? []).map((item) => item.id === id ? bound : item) }));
-      saveModelEvent(stream.client, bound).catch(() => setErrors((current) => ({ ...current, [threadId]: "Could not save the branch reference for a model change." })));
+      setEventsByThread((current) => ({
+        ...current,
+        [threadId]: (current[threadId] ?? []).map((item) => (item.id === id ? bound : item)),
+      }));
+      saveModelEvent(stream.client, bound).catch(() =>
+        setErrors((current) => ({
+          ...current,
+          [threadId]: "Could not save the branch reference for a model change.",
+        })),
+      );
     }
   }, [locked, threadId, pathKey, stream?.client]);
 
@@ -171,9 +179,13 @@ export function ModelThreadProvider({ children }: { children: ReactNode }) {
         .reverse()
         .find((message) => message.additional_kwargs?.metadata?.ui_model)?.additional_kwargs
         ?.metadata?.ui_model;
-      const lastAssistantIndex = raw.findLastIndex((message) => message.additional_kwargs?.metadata?.ui_model);
-      const latestChange = existing.filter((event) => event.messagePath.length >= lastAssistantIndex + 1)
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1);
+      const lastAssistantIndex = raw.findLastIndex(
+        (message) => message.additional_kwargs?.metadata?.ui_model,
+      );
+      const latestChange = existing
+        .filter((event) => event.messagePath.length >= lastAssistantIndex + 1)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+        .at(-1);
       const from = latestChange?.to ?? previous ?? defaultModel;
       if (from.id === model.id) return;
       const event: ModelChangeEvent = {
@@ -242,8 +254,12 @@ export function ModelChangeMarkers({ afterMessageId }: { afterMessageId: string 
 export function ThreadModelError() {
   const { error } = useThreadModels();
   const runError = useLangChainError();
+  const branch = useAuiState(
+    (s) => s.thread.extras as { branchError?: string; retryBranches?: () => void } | undefined,
+  );
   // Run failures can precede the first assistant message, so they also need a thread-level outlet.
   const text =
+    branch?.branchError ??
     error ??
     (runError
       ? "Model request failed. Check the model, connection, and API key, then retry."
@@ -254,6 +270,11 @@ export function ThreadModelError() {
       className="my-2 rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive"
     >
       {text}
+      {branch?.branchError && branch.retryBranches && (
+        <button type="button" className="ml-2 underline" onClick={branch.retryBranches}>
+          Retry
+        </button>
+      )}
     </p>
   ) : null;
 }
