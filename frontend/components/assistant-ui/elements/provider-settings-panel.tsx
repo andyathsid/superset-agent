@@ -109,7 +109,7 @@ export function ProviderSettingsPanel({
     <Dialog>
       <DialogTrigger render={<Button variant="ghost" size="sm" className="w-full justify-start" />}>
         <Settings2Icon />
-        Model provider
+        Model provider settings
       </DialogTrigger>
 
       <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-lg">

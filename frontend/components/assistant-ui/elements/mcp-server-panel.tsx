@@ -208,7 +208,7 @@ export function McpServerPanel({
       data-slot="mcp-server-panel"
       className={cn(
         paper,
-        "group/mcp-server-panel flex w-full max-w-sm flex-col rounded-2xl p-3",
+        "group/mcp-server-panel flex w-full flex-col rounded-2xl p-3",
         className,
       )}
       {...props}

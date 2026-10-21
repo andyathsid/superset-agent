@@ -24,7 +24,34 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuiState } from "@assistant-ui/react";
 import { MenuIcon, PanelLeftIcon } from "lucide-react";
-import { useState, type FC, type MouseEvent, type ReactNode } from "react";
+import {
+  useRef,
+  useState,
+  type FC,
+  type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
+
+const COLLAPSED_SIDEBAR_WIDTH = 48;
+const EXPAND_DRAG_THRESHOLD = COLLAPSED_SIDEBAR_WIDTH + 32;
+const DEFAULT_SIDEBAR_WIDTH = 260;
+const MIN_SIDEBAR_WIDTH = 220;
+const COLLAPSE_DRAG_THRESHOLD = MIN_SIDEBAR_WIDTH - 40;
+const MAX_SIDEBAR_WIDTH = 480;
+const MIN_CONTENT_WIDTH = 320;
+const KEYBOARD_RESIZE_STEP = 16;
+
+const clampSidebarWidth = (width: number) => {
+  const availableWidth = window.innerWidth - MIN_CONTENT_WIDTH;
+  const maxWidth = Math.max(
+    MIN_SIDEBAR_WIDTH,
+    Math.min(MAX_SIDEBAR_WIDTH, availableWidth),
+  );
+
+  return Math.min(Math.max(width, MIN_SIDEBAR_WIDTH), maxWidth);
+};
 
 type CloneThreadShellProps = {
   children: ReactNode;
@@ -58,6 +85,12 @@ export const CloneThreadShell: FC<CloneThreadShellProps> = ({
   const [internalCollapsed, setInternalCollapsed] = useState(defaultCollapsed);
   const [internalMobileOpen, setInternalMobileOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeDragRef = useRef<{
+    pointerId: number;
+    startedCollapsed: boolean;
+  } | null>(null);
   const hasThreads = useAuiState((s) => s.threads.threadIds.length > 0);
 
   // A controlled value means the caller renders the chrome that drives it, so
@@ -75,6 +108,94 @@ export const CloneThreadShell: FC<CloneThreadShellProps> = ({
   const setMobileOpen = (open: boolean) => {
     if (!mobileControlled) setInternalMobileOpen(open);
     onMobileSidebarOpenChange?.(open);
+  };
+
+  const handleResizePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+
+    event.preventDefault();
+    resizeDragRef.current = {
+      pointerId: event.pointerId,
+      startedCollapsed: sidebarCollapsed,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setIsResizing(true);
+  };
+
+  const handleResizePointerEnd = (event: PointerEvent<HTMLDivElement>) => {
+    if (resizeDragRef.current?.pointerId !== event.pointerId) return;
+
+    resizeDragRef.current = null;
+    setIsResizing(false);
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const handleResizePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const resizeDrag = resizeDragRef.current;
+    if (!resizeDrag || resizeDrag.pointerId !== event.pointerId) return;
+
+    if (resizeDrag.startedCollapsed) {
+      if (event.clientX < EXPAND_DRAG_THRESHOLD) return;
+
+      setSidebarWidth(clampSidebarWidth(event.clientX));
+      if (sidebarCollapsed) setSidebarCollapsed(false);
+      return;
+    }
+
+    if (event.clientX <= COLLAPSE_DRAG_THRESHOLD) {
+      handleResizePointerEnd(event);
+      setSidebarWidth(MIN_SIDEBAR_WIDTH);
+      setSidebarCollapsed(true);
+      return;
+    }
+
+    setSidebarWidth(clampSidebarWidth(event.clientX));
+  };
+
+  const handleResizeKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (sidebarCollapsed) {
+      if (event.key !== "ArrowRight" && event.key !== "End") return;
+
+      event.preventDefault();
+      setSidebarWidth(
+        event.key === "End"
+          ? clampSidebarWidth(MAX_SIDEBAR_WIDTH)
+          : MIN_SIDEBAR_WIDTH,
+      );
+      setSidebarCollapsed(false);
+      return;
+    }
+
+    if (event.key === "ArrowLeft" && sidebarWidth <= MIN_SIDEBAR_WIDTH) {
+      event.preventDefault();
+      setSidebarCollapsed(true);
+      return;
+    }
+
+    let nextWidth: number;
+
+    switch (event.key) {
+      case "ArrowLeft":
+        nextWidth = sidebarWidth - KEYBOARD_RESIZE_STEP;
+        break;
+      case "ArrowRight":
+        nextWidth = sidebarWidth + KEYBOARD_RESIZE_STEP;
+        break;
+      case "Home":
+        nextWidth = MIN_SIDEBAR_WIDTH;
+        break;
+      case "End":
+        nextWidth = MAX_SIDEBAR_WIDTH;
+        break;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+    setSidebarWidth(clampSidebarWidth(nextWidth));
   };
 
   const closeMobileSidebarAfterNavigation = (
@@ -109,10 +230,13 @@ export const CloneThreadShell: FC<CloneThreadShellProps> = ({
     <div className="relative flex h-full w-full overflow-hidden">
       <aside
         className={cn(
-          "bg-muted/30 hidden h-full shrink-0 flex-col overflow-hidden border-r transition-[width] duration-200 md:flex",
+          "bg-muted/30 relative hidden h-full shrink-0 flex-col overflow-hidden border-r md:flex",
+          isResizing ? "select-none" : "transition-[width] duration-200",
           railClassName,
-          sidebarCollapsed ? "w-12" : "w-65",
         )}
+        style={{
+          width: sidebarCollapsed ? COLLAPSED_SIDEBAR_WIDTH : sidebarWidth,
+        }}
       >
         <div className="flex h-12 shrink-0 items-center overflow-hidden px-2">
           {!collapsedControlled && (
@@ -139,7 +263,7 @@ export const CloneThreadShell: FC<CloneThreadShellProps> = ({
             "relative flex-1 transition-[padding,width] duration-200",
             sidebarCollapsed
               ? "w-12 overflow-hidden px-2 pt-1"
-              : "w-65 overflow-y-auto p-3",
+              : "w-full overflow-y-auto p-3",
           )}
         >
           {sidebarContent !== undefined && (
@@ -192,6 +316,27 @@ export const CloneThreadShell: FC<CloneThreadShellProps> = ({
           />
         </ThreadListRoot>
       </aside>
+
+      <div
+        role="separator"
+        aria-label={sidebarCollapsed ? "Expand sidebar" : "Resize sidebar"}
+        aria-orientation="vertical"
+        aria-valuemin={COLLAPSED_SIDEBAR_WIDTH}
+        aria-valuemax={MAX_SIDEBAR_WIDTH}
+        aria-valuenow={
+          sidebarCollapsed ? COLLAPSED_SIDEBAR_WIDTH : sidebarWidth
+        }
+        tabIndex={0}
+        className="absolute inset-y-0 z-20 hidden w-2 -translate-x-1/2 cursor-col-resize touch-none outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 hover:after:bg-ring focus-visible:after:bg-ring md:block"
+        style={{
+          left: sidebarCollapsed ? COLLAPSED_SIDEBAR_WIDTH : sidebarWidth,
+        }}
+        onPointerDown={handleResizePointerDown}
+        onPointerMove={handleResizePointerMove}
+        onPointerUp={handleResizePointerEnd}
+        onPointerCancel={handleResizePointerEnd}
+        onKeyDown={handleResizeKeyDown}
+      />
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         {!mobileControlled && (
