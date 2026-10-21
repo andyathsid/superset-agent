@@ -243,26 +243,80 @@ function ToolFallbackContent({
 }
 
 function ToolFallbackArgs({
-  argsText,
+  args,
   className,
   ...props
 }: React.ComponentProps<"div"> & {
-  argsText?: string;
+  args?: unknown;
 }) {
-  if (!argsText) return null;
+  if (args === undefined) return null;
 
   return (
-    <div
+    <Collapsible
       data-slot="tool-fallback-args"
-      className={cn("aui-tool-fallback-args", className)}
+      className={cn("aui-tool-fallback-args group/tool-args", className)}
       {...props}
     >
-      <pre className="aui-tool-fallback-args-value bg-muted/50 text-foreground/90 rounded-md p-2.5 text-xs break-words whitespace-pre-wrap">
-        {argsText}
-      </pre>
-    </div>
+      <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex w-full items-center gap-1.5 text-xs font-medium transition-colors">
+        <ChevronDownIcon className="size-3 shrink-0 -rotate-90 transition-transform group-data-open/tool-args:rotate-0" />
+        Arguments
+      </CollapsibleTrigger>
+      <CollapsibleContent className="overflow-hidden">
+        <ToolFallbackValue
+          className="mt-1.5 max-h-48"
+          value={args}
+        />
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
+
+const parseJsonValue = (value: string): unknown => {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+};
+
+const isMcpTextContent = (value: unknown): value is { text: string } =>
+  typeof value === "object" &&
+  value !== null &&
+  "type" in value &&
+  value.type === "text" &&
+  "text" in value &&
+  typeof value.text === "string";
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const getToolPresentation = (toolName: string, argsText?: string) => {
+  const args = argsText ? parseJsonValue(argsText) : undefined;
+
+  if (
+    toolName !== "call_tool" ||
+    !isRecord(args) ||
+    typeof args.name !== "string"
+  ) {
+    return { name: toolName, args };
+  }
+
+  return { name: args.name, args: args.arguments };
+};
+
+// MCP tool servers commonly return a single text content block whose text is
+// itself JSON. Unwrap that transport envelope before displaying the payload.
+const normalizeToolResult = (value: unknown): unknown => {
+  if (
+    Array.isArray(value) &&
+    value.length === 1 &&
+    isMcpTextContent(value[0])
+  ) {
+    return parseJsonValue(value[0].text);
+  }
+
+  return value;
+};
 
 const formatUnknownValue = (value: unknown, space?: number): string => {
   if (typeof value === "string") return value;
@@ -280,6 +334,25 @@ const formatUnknownValue = (value: unknown, space?: number): string => {
     return "[Unserializable value]";
   }
 };
+
+function ToolFallbackValue({
+  value,
+  className,
+}: {
+  value: unknown;
+  className?: string;
+}) {
+  return (
+    <pre
+      className={cn(
+        "bg-muted/50 text-foreground/90 overflow-auto rounded-md border p-2.5 text-xs leading-5 break-words whitespace-pre-wrap",
+        className,
+      )}
+    >
+      {formatUnknownValue(value, 2)}
+    </pre>
+  );
+}
 
 function ToolFallbackResult({
   result,
@@ -299,9 +372,10 @@ function ToolFallbackResult({
       <p className="aui-tool-fallback-result-header text-muted-foreground text-xs font-medium">
         Result:
       </p>
-      <pre className="aui-tool-fallback-result-content bg-muted/50 text-foreground/90 mt-1 rounded-md p-2.5 text-xs break-words whitespace-pre-wrap">
-        {formatUnknownValue(result, 2)}
-      </pre>
+      <ToolFallbackValue
+        className="aui-tool-fallback-result-content mt-1 max-h-96"
+        value={normalizeToolResult(result)}
+      />
     </div>
   );
 }
@@ -1206,6 +1280,7 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   approval,
   respondToApproval,
 }) => {
+  const presentation = getToolPresentation(toolName, argsText);
   const isCancelled =
     status?.type === "incomplete" && status.reason === "cancelled";
   const isRequiresAction = status?.type === "requires-action";
@@ -1249,14 +1324,14 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   return (
     <ToolFallbackRoot open={open} onOpenChange={setOpen}>
       <ToolFallbackTrigger
-        toolName={toolName}
+        toolName={presentation.name}
         status={status}
         responseDeliveryStatus={responseDeliveryStatus}
       />
       <ToolFallbackContent>
         <ToolFallbackError status={status} />
         <ToolFallbackArgs
-          argsText={argsText}
+          args={presentation.args}
           className={cn(isCancelled && "opacity-60")}
         />
         {shouldRenderApproval && (

@@ -512,7 +512,7 @@ const ThreadWelcome: FC = () => {
   return (
     <div className="aui-thread-welcome-root mb-6 flex flex-col px-2">
       <p className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-medium tracking-tight duration-200">
-        How can I help you today?
+        What would you like to explore in Superset?
       </p>
     </div>
   );
@@ -767,6 +767,22 @@ const RunActivityGroup: FC<{ group: ThreadGroupPart }> = ({ group }) => {
       ];
     }
 
+    if (part?.type === "text") {
+      return [
+        {
+          id: `commentary-${index}`,
+          kind: "commentary",
+          label: "Update",
+          content: (
+            <MessagePrimitive.PartByIndex
+              index={index}
+              components={{ Text: MarkdownText }}
+            />
+          ),
+        },
+      ];
+    }
+
     return [];
   });
 
@@ -794,7 +810,24 @@ const AssistantMessage: FC = () => {
     ReasoningGroup,
     TaskGroup: TaskGroupComponent,
   } = useContext(ThreadComponentsContext);
-  const groupBy = TaskGroupComponent ? taskAwareGroupBy : messageGroupBy;
+  const parts = useAuiState((s) => s.message.parts);
+  const lastActivityIndex = parts.findLastIndex(
+    (part) => part.type === "reasoning" || part.type === "tool-call",
+  );
+  // Text followed by more activity is commentary; trailing answer text stays outside.
+  const commentaryParts = new Set(
+    parts
+      .slice(0, Math.max(0, lastActivityIndex))
+      .filter((part) => part.type === "text"),
+  );
+  const baseGroupBy = TaskGroupComponent ? taskAwareGroupBy : messageGroupBy;
+  const groupBy = (
+    part: Parameters<typeof messageGroupBy>[0],
+    context?: Parameters<typeof messageGroupBy>[1],
+  ): readonly ThreadGroupKey[] =>
+    part.type === "text" && commentaryParts.has(part)
+      ? ["group-chainOfThought"]
+      : baseGroupBy(part, context);
 
   const ACTION_BAR_PT = "pt-1.5";
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.

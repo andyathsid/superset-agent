@@ -254,7 +254,7 @@ export const CloneThreadShell: FC<CloneThreadShellProps> = ({
           {headerContent !== undefined
             ? headerContent
             : !sidebarCollapsed && (
-                <span className="ml-2 truncate text-sm font-medium">Chats</span>
+                <span className="ml-2 truncate text-sm font-medium">Superset MCP Chatbot</span>
               )}
         </div>
 
@@ -357,7 +357,7 @@ export const CloneThreadShell: FC<CloneThreadShellProps> = ({
         )}
         <SheetContent side="left" className="flex flex-col p-0">
           <SheetTitle className="flex h-12 shrink-0 items-center px-4 text-sm font-medium">
-            {sheetTitle ?? "Chats"}
+            {sheetTitle ?? "Superset MCP Chatbot"}
           </SheetTitle>
           <div
             className="relative flex-1 overflow-y-auto p-3"

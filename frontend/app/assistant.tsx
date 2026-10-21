@@ -26,19 +26,24 @@ type AssistantProps = {
 const assistantConfig = AuiConfig({
   suggestions: Suggestions([
     {
-      title: "Explore data",
-      label: "Find relevant dashboards and metrics",
-      prompt: "Help me explore the available data and dashboards.",
+      title: "What can you do?",
+      label: "Get a quick introduction",
+      prompt:
+        "Briefly describe how you can help me with Superset. ",
     },
     {
-      title: "Analyze a metric",
-      label: "Investigate a trend or anomaly",
-      prompt: "Help me analyze a metric and identify notable trends.",
+      title: "List datasets",
+      label: "See available dataset names and IDs",
+      prompt:
+        "List up to 5 available datasets with their names and IDs. " +
+        "Use catalog metadata only. Do not inspect columns or query data.",
     },
     {
-      title: "MCP servers",
-      label: "Show what tools are available",
-      prompt: "What MCP servers and tools are available to me?",
+      title: "List charts",
+      label: "See existing charts",
+      prompt:
+        "List up to 5 existing charts with their names and chart types. " +
+        "Do not fetch chart data or create anything.",
     },
   ]),
 });
