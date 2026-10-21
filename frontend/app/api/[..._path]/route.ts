@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { OPENROUTER_TESTING_MODEL } from "@/app/lib/assistant/model-config";
+import { OPENROUTER_TESTING_MODEL } from "@/features/assistant/config/models";
 
 export const runtime = "nodejs";
 
