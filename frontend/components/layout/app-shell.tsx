@@ -180,7 +180,7 @@ export const AppShell: FC<AppShellProps> = ({
     <div className="relative flex h-full w-full overflow-hidden">
       <aside
         className={cn(
-          "bg-muted/30 relative hidden h-full shrink-0 flex-col overflow-hidden border-r md:flex",
+          "bg-sidebar relative hidden h-full shrink-0 flex-col overflow-hidden border-r md:flex",
           isResizing ? "select-none" : "transition-[width] duration-200",
           railClassName,
         )}
@@ -250,7 +250,7 @@ export const AppShell: FC<AppShellProps> = ({
             />
           </div>
         )}
-        <SheetContent side="left" className="flex flex-col p-0">
+        <SheetContent side="left" className="bg-sidebar flex flex-col p-0">
           <SheetTitle className="flex h-12 shrink-0 items-center px-4 text-sm font-medium">
             {sheetTitle ?? title}
           </SheetTitle>
