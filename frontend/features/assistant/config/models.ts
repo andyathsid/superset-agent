@@ -33,11 +33,11 @@ export const providerConnections: Record<
     editableBaseUrl: false,
     requiresApiKey: true,
   },
-  ollama: { baseUrl: "http://localhost:11434", editableBaseUrl: true, requiresApiKey: false },
+  ollama: { baseUrl: "http://localhost:11434/v1", editableBaseUrl: true, requiresApiKey: false },
   custom: { baseUrl: "", editableBaseUrl: true, requiresApiKey: true },
 };
 
-// Demo choices only. Selection does not change the backend runtime.
+// Initial choices. Credentials and user-added models stay in memory for this session.
 export const assistantModels: readonly AssistantModel[] = [
   {
     id: "openai/gpt-4.1",
@@ -95,4 +95,10 @@ export const assistantModels: readonly AssistantModel[] = [
   },
 ];
 
-export const defaultModelId = "openai/gpt-4.1";
+export const defaultModelId = "default";
+
+export const defaultModel = {
+  id: defaultModelId,
+  name: "Default Model",
+  description: "Ready to use server-configured model",
+} as const;

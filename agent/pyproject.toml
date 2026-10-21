@@ -10,6 +10,7 @@ dependencies = [
     "slowapi>=0.1.10",
     "langchain-openai>=1.7.2",
     "langchain-openrouter>=0.2.9",
+    "langchain-anthropic>=1.7.6",
 ]
 
 [build-system]

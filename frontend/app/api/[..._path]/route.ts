@@ -1,13 +1,17 @@
 import { type NextRequest, NextResponse } from "next/server";
+import {
+  ModelRequestError,
+  resolveModelContext,
+} from "@/features/assistant/runtime/server-model-config";
 
 export const runtime = "nodejs";
 
 const ALLOWED_METHODS = "GET, POST, PUT, PATCH, DELETE, OPTIONS";
-const MODEL_NAME = "minimax/minimax-m3.1-flash:free";
-const MODEL_BASE_URL = "https://openrouter.ai/api/v1";
 
 type LangGraphRunRequest = {
   context?: Record<string, unknown>;
+  model_selection?: unknown;
+  metadata?: Record<string, unknown>;
 };
 
 type LangGraphCommandRequest = LangGraphRunRequest & {
@@ -82,24 +86,50 @@ async function handleRequest(req: NextRequest, method: string) {
                 : undefined;
 
           if (runRequest) {
-            const testingApiKey = process.env.OPENROUTER_TESTING_API_KEY?.trim();
-
-            if (!testingApiKey) {
-              return NextResponse.json(
-                { error: "OPENROUTER_TESTING_API_KEY is not configured." },
-                { status: 503 },
-              );
-            }
-
+            const selection = runRequest.model_selection;
+            const context = resolveModelContext(selection ?? { id: "default" });
+            delete runRequest.model_selection;
+            const {
+              model_provider: _provider,
+              model_name: _name,
+              model_base_url: _url,
+              model_api_key: _key,
+              ...rest
+            } = runRequest.context ?? {};
             runRequest.context = {
-              ...runRequest.context,
-              model_name: MODEL_NAME,
-              model_base_url: MODEL_BASE_URL,
-              model_api_key: testingApiKey,
+              ...rest,
+              ...context,
+              model_selection_id:
+                selection &&
+                typeof selection === "object" &&
+                "id" in selection &&
+                typeof selection.id === "string"
+                  ? selection.id
+                  : "default",
+              model_display_name:
+                selection &&
+                typeof selection === "object" &&
+                "name" in selection &&
+                typeof selection.name === "string"
+                  ? selection.name
+                  : "Default Model",
+            };
+            runRequest.metadata = {
+              ...runRequest.metadata,
+              ui_model_id: runRequest.context.model_selection_id as string,
+              ui_model_name: runRequest.context.model_display_name as string,
+              ...(context.model_name
+                ? {
+                    ui_model_provider: context.model_provider,
+                    ui_model_provider_id: context.model_name,
+                  }
+                : {}),
             };
             body = JSON.stringify(payload);
           }
-        } catch {
+        } catch (error) {
+          if (error instanceof ModelRequestError)
+            return NextResponse.json({ error: error.message }, { status: 400 });
           // Forward malformed JSON unchanged so LangGraph can report it.
         }
       }

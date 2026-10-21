@@ -1,22 +1,21 @@
 "use client";
 
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { BoxIcon, SparklesIcon, PlusIcon, LockKeyholeIcon } from "lucide-react";
 import { defaultFilter } from "cmdk";
 import { Button } from "@/components/ui/button";
 import { ApiKeyDialog, ApiKeySettingsButton } from "./model-api-key-settings";
 import {
-  assistantModels,
-  defaultModelId,
+  defaultModel,
   modelProviders,
   type ModelProviderId,
   type AssistantModel,
-  type ModelConnection,
-  type ProviderApiKeys,
   type SharedKeyProvider,
 } from "../config/models";
 import { AddModelDialog } from "./add-model-dialog";
 import { ModelActionsButton, ModelActionDialog, type ModelAction } from "./model-actions";
+import { useModels } from "./model-provider";
+import { useThreadModels } from "./model-thread-provider";
 import { ClaudeLogo, OllamaLogo, OpenAILogo, OpenRouterLogo } from "./assistant-ui/elements/logos";
 import {
   ModelSelectorContent,
@@ -52,49 +51,47 @@ function toModelOption(model: AssistantModel) {
   };
 }
 
-const defaultTarget = assistantModels.find((model) => model.id === defaultModelId);
-
-if (!defaultTarget) {
-  throw new Error(`Default model not found: ${defaultModelId}`);
-}
-
 // Keep the alias distinct so selecting it does not also check the target model.
 const defaultOption = {
-  ...defaultTarget,
-  id: "default",
-  modelId: defaultTarget.id,
-  name: "Default Model",
-  description: "Recommended and available model",
+  ...defaultModel,
   icon: <SparklesIcon className="size-3.5 text-muted-foreground" />,
 };
 
 export function AssistantModelSelector() {
-  const [allModels, setAllModels] = useState<AssistantModel[]>(() => [...assistantModels]);
+  const {
+    allModels,
+    setAllModels,
+    selectedModel,
+    connectionsRef,
+    providerApiKeys,
+    setProviderApiKeys,
+    customApiKeys,
+    setCustomApiKeys,
+    getApiKey,
+  } = useModels();
+  const { locked, selectModel } = useThreadModels();
   const [actionTarget, setActionTarget] = useState<{
     model: AssistantModel;
     action: ModelAction;
   } | null>(null);
-  const [selectedModel, setSelectedModel] = useState(defaultOption.id);
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
-  // Credentials stay in memory, separate from the model metadata rendered by cmdk.
-  const connectionsRef = useRef(new Map<string, ModelConnection>());
-  const [providerApiKeys, setProviderApiKeys] = useState<ProviderApiKeys>({});
-  const [customApiKeys, setCustomApiKeys] = useState<Record<string, string>>({});
   const [keyTarget, setKeyTarget] = useState<{
     name: string;
     provider?: SharedKeyProvider;
     modelId?: string;
   } | null>(null);
   const managingModelRef = useRef(false);
-  function getApiKey(model: AssistantModel) {
-    return model.provider === "custom"
-      ? customApiKeys[model.id]
-      : model.provider === "ollama"
-        ? undefined
-        : providerApiKeys[model.provider];
-  }
+  useEffect(() => {
+    if (!locked) return;
+    setSelectorOpen(false);
+    setActionTarget(null);
+    setKeyTarget(null);
+    setAddDialogOpen(false);
+    managingModelRef.current = false;
+  }, [locked]);
   function editKey(target: NonNullable<typeof keyTarget>) {
+    if (locked) return;
     managingModelRef.current = true;
     setKeyTarget(target);
     setSelectorOpen(false);
@@ -105,6 +102,7 @@ export function AssistantModelSelector() {
     managingModelRef.current = false;
   }
   function openModelAction(model: AssistantModel, action: ModelAction) {
+    if (locked) return;
     managingModelRef.current = true;
     setActionTarget({ model, action });
     setSelectorOpen(false);
@@ -148,11 +146,11 @@ export function AssistantModelSelector() {
         value={selectedModel}
         onValueChange={(id) => {
           const model = selectorModels.find((item) => item.id === id);
-          if (model && !("disabled" in model && model.disabled)) setSelectedModel(id);
+          if (!locked && model && !("disabled" in model && model.disabled)) selectModel(id);
         }}
-        open={selectorOpen}
+        open={selectorOpen && !locked}
         onOpenChange={(open) => {
-          setSelectorOpen(open);
+          setSelectorOpen(open && !locked);
           if (!open && !managingModelRef.current) {
             setSearch("");
             setProvider("all");
@@ -163,6 +161,7 @@ export function AssistantModelSelector() {
           variant="ghost"
           size="sm"
           aria-label="Select model"
+          disabled={locked}
           className="h-7 max-w-48 rounded-lg border-0 px-2 shadow-none"
         />
         <ModelSelectorContent
@@ -283,13 +282,14 @@ export function AssistantModelSelector() {
           </ModelSelectorList>
         </ModelSelectorContent>
       </ModelSelectorRoot>
-      {actionTarget && (
+      {actionTarget && !locked && (
         <ModelActionDialog
           key={`${actionTarget.action}/${actionTarget.model.id}`}
           model={actionTarget.model}
           action={actionTarget.action}
           onClose={closeModelAction}
           onSave={(changes) => {
+            if (locked) return;
             setAllModels((current) =>
               current.map((model) =>
                 model.id === actionTarget.model.id ? { ...model, ...changes } : model,
@@ -298,6 +298,7 @@ export function AssistantModelSelector() {
             closeModelAction();
           }}
           onDelete={() => {
+            if (locked) return;
             const id = actionTarget.model.id;
             setAllModels((current) => current.filter((model) => model.id !== id));
             connectionsRef.current.delete(id);
@@ -306,12 +307,12 @@ export function AssistantModelSelector() {
               delete next[id];
               return next;
             });
-            if (selectedModel === id) setSelectedModel(defaultOption.id);
+            if (selectedModel === id) selectModel(defaultOption.id);
             closeModelAction();
           }}
         />
       )}
-      {keyTarget && (
+      {keyTarget && !locked && (
         <ApiKeyDialog
           name={keyTarget.name}
           apiKey={
@@ -321,6 +322,7 @@ export function AssistantModelSelector() {
           }
           onClose={closeKeyDialog}
           onSave={(apiKey) => {
+            if (locked) return;
             if (keyTarget.provider)
               setProviderApiKeys((current) => ({ ...current, [keyTarget.provider!]: apiKey }));
             else setCustomApiKeys((current) => ({ ...current, [keyTarget.modelId!]: apiKey }));
@@ -329,18 +331,19 @@ export function AssistantModelSelector() {
         />
       )}
       <AddModelDialog
-        open={addDialogOpen}
+        open={addDialogOpen && !locked}
         onOpenChange={setAddDialogOpen}
         models={allModels}
         providerApiKeys={providerApiKeys}
         onAdd={(model, connection, apiKey) => {
+          if (locked) return;
           if (model.provider === "custom")
             setCustomApiKeys((current) => ({ ...current, [model.id]: apiKey }));
           else if (model.provider !== "ollama")
             setProviderApiKeys((current) => ({ ...current, [model.provider]: apiKey }));
           connectionsRef.current.set(model.id, connection);
           setAllModels((current) => [...current, model]);
-          setSelectedModel(model.id);
+          selectModel(model.id, model);
           setAddDialogOpen(false);
         }}
       />

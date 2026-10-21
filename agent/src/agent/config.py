@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from typing import Literal
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, SecretStr
@@ -17,6 +18,11 @@ class AgentContext(BaseModel):
     model_name: str | None = None
     model_base_url: str | None = None
     model_api_key: str | None = None
+    model_provider: (
+        Literal["openai", "openrouter", "anthropic", "ollama", "custom"] | None
+    ) = None
+    model_selection_id: str | None = None
+    model_display_name: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +33,9 @@ class AgentSettings:
     superset_mcp_url: str
     superset_mcp_api_key: SecretStr | None
     superset_default_dataset: str
+    model_provider: str = "openrouter"
+    model_selection_id: str = "default"
+    model_display_name: str = "Default Model"
 
     @classmethod
     def from_env(cls, context: AgentContext | None = None) -> AgentSettings:
@@ -48,6 +57,18 @@ class AgentSettings:
             context.model_api_key if context else None,
             "MODEL_API_KEY",
         )
+        model_provider = (
+            model_value(context.model_provider if context else None, "MODEL_PROVIDER")
+            or "openrouter"
+        )
+        if model_provider not in {
+            "openai",
+            "openrouter",
+            "anthropic",
+            "ollama",
+            "custom",
+        }:
+            raise RuntimeError("Unsupported model provider.")
 
         if not model_name:
             raise RuntimeError("Set MODEL_NAME or select a model.")
@@ -75,6 +96,11 @@ class AgentSettings:
             model_name=model_name,
             model_base_url=model_base_url,
             model_api_key=SecretStr(model_api_key),
+            model_provider=model_provider,
+            model_selection_id=(context.model_selection_id if context else None)
+            or "default",
+            model_display_name=(context.model_display_name if context else None)
+            or "Default Model",
             superset_mcp_url=os.getenv(
                 "SUPERSET_MCP_URL",
                 "http://localhost:5008/mcp",

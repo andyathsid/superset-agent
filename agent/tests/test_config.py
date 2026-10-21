@@ -6,11 +6,11 @@ import pytest
 
 from agent.config import AgentContext, AgentSettings
 
-
 SETTINGS_ENV_VARS = (
     "MODEL_NAME",
     "MODEL_BASE_URL",
     "MODEL_API_KEY",
+    "MODEL_PROVIDER",
     "SUPERSET_MCP_URL",
     "SUPERSET_MCP_API_KEY",
     "SUPERSET_DEFAULT_DATASET",
@@ -136,6 +136,22 @@ def test_uses_superset_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.superset_mcp_url == "http://localhost:5008/mcp"
     assert settings.superset_default_dataset == "wb_health_population"
     assert settings.superset_mcp_api_key is None
+
+
+def test_runtime_provider_overrides_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    set_required_model_environment(monkeypatch)
+    monkeypatch.setenv("MODEL_PROVIDER", "openrouter")
+    settings = AgentSettings.from_env(AgentContext(model_provider="anthropic"))
+    assert settings.model_provider == "anthropic"
+
+
+def test_rejects_unknown_environment_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_required_model_environment(monkeypatch)
+    monkeypatch.setenv("MODEL_PROVIDER", "unknown")
+    with pytest.raises(RuntimeError, match="Unsupported model provider"):
+        AgentSettings.from_env()
 
 
 def test_loads_superset_configuration(monkeypatch: pytest.MonkeyPatch) -> None:

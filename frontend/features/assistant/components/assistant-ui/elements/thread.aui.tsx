@@ -29,6 +29,7 @@ import {
 } from "@/features/assistant/components/assistant-ui/elements/run-activity";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MessageModelChangeMarkers, ThreadModelError } from "../../model-thread-provider";
 import { cn } from "@/lib/utils";
 import {
   ActionBarMorePrimitive,
@@ -285,8 +286,14 @@ const ThreadRoot: FC<{
             className="mb-14 flex flex-col gap-y-6 empty:hidden"
           >
             <ThreadPrimitive.Messages>
-              {() => <ThreadMessage />}
+              {() => (
+                <>
+                  <ThreadMessage />
+                  <MessageModelChangeMarkers />
+                </>
+              )}
             </ThreadPrimitive.Messages>
+            <ThreadModelError />
           </div>
 
           <ThreadPrimitive.ViewportFooter

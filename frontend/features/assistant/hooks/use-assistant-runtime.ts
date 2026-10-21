@@ -5,8 +5,21 @@ import type { RemoteThreadListAdapter } from "@assistant-ui/react";
 import { useStreamRuntime } from "@assistant-ui/react-langchain";
 import { Client } from "@langchain/langgraph-sdk";
 import { createLangGraphThreadListAdapter } from "../runtime/langgraph-thread-list-adapter";
+import { useModels } from "../components/model-provider";
+import { createModelFetch } from "../runtime/model-transport";
 
 export function useAssistantRuntime() {
+  const { snapshotRef, prepareRunRef } = useModels();
+  const modelFetch = useMemo(
+    () =>
+      createModelFetch(
+        () => snapshotRef.current(),
+        async (...args) => {
+          await prepareRunRef.current?.(...args);
+        },
+      ),
+    [snapshotRef, prepareRunRef],
+  );
   const apiUrl =
     typeof window !== "undefined" ? new URL("/api", window.location.href).href : undefined;
 
@@ -20,6 +33,7 @@ export function useAssistantRuntime() {
   const runtime = useStreamRuntime({
     assistantId: process.env.NEXT_PUBLIC_LANGGRAPH_ASSISTANT_ID!,
     apiUrl,
+    fetch: modelFetch,
     unstable_threadListAdapter: threadListAdapter,
   });
 
