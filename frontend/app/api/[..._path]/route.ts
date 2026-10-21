@@ -1,8 +1,24 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { OPENROUTER_TESTING_MODEL } from "@/app/lib/assistant/model-config";
 
 export const runtime = "nodejs";
 
 const ALLOWED_METHODS = "GET, POST, PUT, PATCH, DELETE, OPTIONS";
+
+type LangGraphRunRequest = {
+  config?: {
+    configurable?: {
+      model_name?: unknown;
+      model_base_url?: unknown;
+      model_api_key?: unknown;
+    };
+  };
+};
+
+type LangGraphCommandRequest = LangGraphRunRequest & {
+  method?: unknown;
+  params?: LangGraphRunRequest;
+};
 
 function isAllowedRequestContext(req: NextRequest) {
   const fetchSite = req.headers.get("sec-fetch-site");
@@ -65,7 +81,40 @@ async function handleRequest(req: NextRequest, method: string) {
     };
 
     if (["POST", "PUT", "PATCH"].includes(method)) {
-      options.body = await req.text();
+      let body = await req.text();
+
+      if (contentType?.includes("application/json")) {
+        try {
+          const payload = JSON.parse(body) as LangGraphCommandRequest;
+          // Agent Protocol commands wrap run configuration in `params`.
+          const runRequest =
+            payload.method === "run.start" || payload.method === "input.respond"
+              ? payload.params
+              : payload;
+          const configurable = runRequest?.config?.configurable;
+
+          if (
+            configurable?.model_name === OPENROUTER_TESTING_MODEL.name &&
+            configurable.model_base_url === OPENROUTER_TESTING_MODEL.baseUrl
+          ) {
+            const testingApiKey = process.env.OPENROUTER_TESTING_API_KEY?.trim();
+
+            if (!testingApiKey) {
+              return NextResponse.json(
+                { error: "OPENROUTER_TESTING_API_KEY is not configured." },
+                { status: 503 },
+              );
+            }
+
+            configurable.model_api_key = testingApiKey;
+            body = JSON.stringify(payload);
+          }
+        } catch {
+          // Forward malformed JSON unchanged so LangGraph can report it.
+        }
+      }
+
+      options.body = body;
     }
 
     const res = await fetch(`${apiUrl}/${path}${queryString}`, options);
