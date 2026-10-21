@@ -46,6 +46,7 @@ type AppShellProps = {
   mobileSidebarOpen?: boolean | undefined;
   onMobileSidebarOpenChange?: ((value: boolean) => void) | undefined;
   headerContent?: ReactNode | undefined;
+  headerActions?: ReactNode | undefined;
   sheetTitle?: ReactNode | undefined;
 };
 
@@ -60,6 +61,7 @@ export const AppShell: FC<AppShellProps> = ({
   mobileSidebarOpen,
   onMobileSidebarOpenChange,
   headerContent,
+  headerActions,
   sheetTitle,
 }) => {
   const [internalCollapsed, setInternalCollapsed] = useState(defaultCollapsed);
@@ -260,7 +262,14 @@ export const AppShell: FC<AppShellProps> = ({
         </SheetContent>
       </Sheet>
 
-      <div className="min-w-0 flex-1 overflow-hidden">{children}</div>
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {headerActions && (
+          <header className="flex h-12 shrink-0 items-center justify-end px-3 pl-12 md:px-4">
+            {headerActions}
+          </header>
+        )}
+        <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+      </div>
     </div>
   );
 };

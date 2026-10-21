@@ -70,6 +70,7 @@ type McpServerPanelProps = Omit<
   onAuthorize?: (id: string) => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  showTrigger?: boolean;
 };
 
 export function McpServerPanel({
@@ -79,6 +80,7 @@ export function McpServerPanel({
   onAuthorize,
   open,
   onOpenChange,
+  showTrigger = true,
   className,
   ...props
 }: McpServerPanelProps) {
@@ -178,10 +180,11 @@ export function McpServerPanel({
       )}
       {...props}
     >
-      <CollapsibleTrigger className="flex items-baseline gap-1 rounded-lg px-1 py-1 text-start outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
-        <span className="text-[13.5px] font-medium">MCP Status</span>
+      {showTrigger && (
+        <CollapsibleTrigger className="flex items-baseline gap-1 rounded-lg px-1 py-1 text-start outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+          <span className="text-[13.5px] font-medium">MCP Status</span>
 
-        {/* <span
+          {/* <span
           className={cn(
             mono,
             "text-muted-foreground min-w-0 flex-1 tabular-nums",
@@ -189,8 +192,9 @@ export function McpServerPanel({
         >
           {connected} of {servers.length} connected
         </span> */}
-        <ChevronDownIcon className="self-center ml-auto text-muted-foreground size-3.5 shrink-0 -rotate-90 transition-transform duration-200 group-data-open/mcp-server-panel:rotate-0 motion-reduce:transition-none" />
-      </CollapsibleTrigger>
+          <ChevronDownIcon className="self-center ml-auto text-muted-foreground size-3.5 shrink-0 -rotate-90 transition-transform duration-200 group-data-open/mcp-server-panel:rotate-0 motion-reduce:transition-none" />
+        </CollapsibleTrigger>
+      )}
 
       <CollapsibleContent className="overflow-hidden data-closed:animate-collapsible-up data-open:animate-collapsible-down">
         <div className="flex flex-col gap-2 pt-1">

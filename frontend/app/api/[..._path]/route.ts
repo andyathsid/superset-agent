@@ -29,14 +29,20 @@ function isAllowedRequestContext(req: NextRequest) {
   if (origin === null) return true;
 
   try {
-    return new URL(origin).origin === req.nextUrl.origin;
+    const requestUrl = new URL(req.nextUrl.href);
+    requestUrl.host = req.headers.get("host") ?? requestUrl.host;
+
+    return new URL(origin).origin === requestUrl.origin;
   } catch {
     return false;
   }
 }
 
 function crossOriginResponse() {
-  return NextResponse.json({ error: "Cross-origin requests are not allowed." }, { status: 403 });
+  return NextResponse.json(
+    { error: "Cross-origin requests are not allowed." },
+    { status: 403 },
+  );
 }
 
 async function handleRequest(req: NextRequest, method: string) {
@@ -45,14 +51,19 @@ async function handleRequest(req: NextRequest, method: string) {
   try {
     const apiUrl = process.env.LANGGRAPH_API_URL?.trim();
     if (!apiUrl) {
-      return NextResponse.json({ error: "LANGGRAPH_API_URL is not configured." }, { status: 503 });
+      return NextResponse.json(
+        { error: "LANGGRAPH_API_URL is not configured." },
+        { status: 503 },
+      );
     }
 
     const path = req.nextUrl.pathname.replace(/^\/?api\//, "");
     const searchParams = new URLSearchParams(req.nextUrl.search);
     searchParams.delete("_path");
     searchParams.delete("nxtP_path");
-    const queryString = searchParams.toString() ? `?${searchParams.toString()}` : "";
+    const queryString = searchParams.toString()
+      ? `?${searchParams.toString()}`
+      : "";
 
     const headers = new Headers();
     const apiKey = process.env.LANGCHAIN_API_KEY?.trim();
@@ -174,7 +185,10 @@ async function handleRequest(req: NextRequest, method: string) {
   } catch (e: unknown) {
     if (e instanceof Error) {
       const typedError = e as Error & { status?: number };
-      return NextResponse.json({ error: typedError.message }, { status: typedError.status ?? 500 });
+      return NextResponse.json(
+        { error: typedError.message },
+        { status: typedError.status ?? 500 },
+      );
     }
     return NextResponse.json({ error: "Unknown error" }, { status: 500 });
   }
