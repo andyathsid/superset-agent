@@ -1,4 +1,3 @@
-
 """Aegra-compatible LangChain agent with Apache Superset MCP tools."""
 
 from __future__ import annotations
@@ -10,32 +9,20 @@ from typing import Any
 from dotenv import load_dotenv
 from langchain.agents import create_agent
 from langchain_core.language_models import BaseChatModel
-from langchain_ollama import ChatOllama
-from langchain_openrouter import ChatOpenRouter
+from langchain_openai import ChatOpenAI
 from langgraph_sdk.runtime import ServerRuntime
 
-from agent.config import AgentSettings
+from agent.config import AgentContext, AgentSettings
 from agent.prompts import SYSTEM_PROMPT
 from agent.tools import create_tools
 
 
 def create_chat_model(settings: AgentSettings) -> BaseChatModel:
-    """Create the chat model selected by the configured provider."""
-    if settings.provider == "ollama":
-        return ChatOllama(
-            model=settings.ollama_model,
-            base_url=settings.ollama_base_url,
-            num_ctx=settings.ollama_num_ctx,
-            temperature=0,
-        )
-
-    if settings.openrouter_api_key is None:
-        raise RuntimeError("OPENROUTER_API_KEY is required for OpenRouter.")
-
-    return ChatOpenRouter(
-        model=settings.openrouter_model,
-        api_key=settings.openrouter_api_key,
-        base_url=settings.openrouter_base_url,
+    """Create a model through the OpenAI Chat Completions-compatible API."""
+    return ChatOpenAI(
+        model=settings.model_name,
+        api_key=settings.model_api_key,
+        base_url=settings.model_base_url,
         temperature=0,
     )
 
@@ -47,15 +34,21 @@ def build_agent(settings: AgentSettings, tools: list[Any]) -> Any:
         tools=tools,
         system_prompt=SYSTEM_PROMPT,
         name="build_agent",
+        context_schema=AgentContext,
     )
 
 
 @asynccontextmanager
-async def graph(runtime: ServerRuntime) -> AsyncGenerator[Any, None]:
+async def graph(
+    runtime: ServerRuntime[AgentContext],
+) -> AsyncGenerator[Any, None]:
     """Create Aegra's graph and manage MCP connections during execution."""
-    settings = AgentSettings.from_env()
+    execution_runtime = runtime.execution_runtime
+    settings = AgentSettings.from_env(
+        execution_runtime.context if execution_runtime else None
+    )
 
-    if runtime.execution_runtime is None:
+    if execution_runtime is None:
         yield build_agent(settings, [])
         return
 

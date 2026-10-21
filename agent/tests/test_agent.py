@@ -10,6 +10,7 @@ from typing import Any, cast
 
 import pytest
 from agent import agent as agent_module
+from agent.config import AgentContext
 from langchain.messages import AIMessage, ToolMessage
 from langgraph_sdk.runtime import ServerRuntime
 
@@ -73,8 +74,10 @@ async def _run_agent(agent: Any, agent_input: dict[str, Any]) -> dict[str, Any]:
 async def test_agent_e2e() -> None:
 
     runtime = cast(
-        ServerRuntime[None],
-        SimpleNamespace(execution_runtime=object()),
+        ServerRuntime[AgentContext],
+        SimpleNamespace(
+            execution_runtime=SimpleNamespace(context=AgentContext()),
+        ),
     )
 
     async with agent_module.graph(runtime) as agent:

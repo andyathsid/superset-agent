@@ -4,59 +4,84 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
-from pydantic import SecretStr
+from pydantic import BaseModel, ConfigDict, SecretStr
 
-SUPPORTED_PROVIDERS = {"ollama", "openrouter"}
+
+class AgentContext(BaseModel):
+    """Model configuration supplied for one graph execution."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    model_name: str | None = None
+    model_base_url: str | None = None
+    model_api_key: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class AgentSettings:
-    provider: str
-    openrouter_api_key: SecretStr | None
-    openrouter_base_url: str
-    openrouter_model: str
-    ollama_model: str
-    ollama_base_url: str
-    ollama_num_ctx: int
+    model_name: str
+    model_base_url: str
+    model_api_key: SecretStr
     superset_mcp_url: str
     superset_mcp_api_key: SecretStr | None
     superset_default_dataset: str
 
     @classmethod
-    def from_env(cls) -> AgentSettings:
-        provider = os.getenv("PROVIDER", "ollama").strip().lower()
-        if provider not in SUPPORTED_PROVIDERS:
-            choices = ", ".join(sorted(SUPPORTED_PROVIDERS))
-            raise RuntimeError(f"PROVIDER must be one of: {choices}.")
+    def from_env(cls, context: AgentContext | None = None) -> AgentSettings:
+        """Load environment defaults with optional per-run model overrides."""
 
-        api_key = os.getenv("OPENROUTER_API_KEY", "")
-        if provider == "openrouter" and not api_key:
-            raise RuntimeError("Set OPENROUTER_API_KEY when PROVIDER=openrouter.")
+        def model_value(override: str | None, env_name: str) -> str:
+            raw_value = os.getenv(env_name, "") if override is None else override
+            return raw_value.strip()
 
-        try:
-            ollama_num_ctx = int(os.getenv("OLLAMA_NUM_CTX", "32768"))
-        except ValueError as error:
-            raise RuntimeError("OLLAMA_NUM_CTX must be an integer.") from error
-        if ollama_num_ctx <= 0:
-            raise RuntimeError("OLLAMA_NUM_CTX must be greater than zero.")
+        model_name = model_value(
+            context.model_name if context else None,
+            "MODEL_NAME",
+        )
+        model_base_url = model_value(
+            context.model_base_url if context else None,
+            "MODEL_BASE_URL",
+        ).rstrip("/")
+        model_api_key = model_value(
+            context.model_api_key if context else None,
+            "MODEL_API_KEY",
+        )
 
-        mcp_api_key = os.getenv("SUPERSET_MCP_API_KEY", "")
+        if not model_name:
+            raise RuntimeError("Set MODEL_NAME or select a model.")
+        if not model_base_url:
+            raise RuntimeError("Set MODEL_BASE_URL or configure a provider endpoint.")
+
+        parsed_url = urlsplit(model_base_url)
+        if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+            raise RuntimeError("MODEL_BASE_URL must be a valid HTTP(S) URL.")
+
+        # Local OpenAI-compatible servers often require no authentication.
+        # An explicitly empty runtime key gets a harmless placeholder.
+        if not model_api_key:
+            runtime_key_was_supplied = (
+                context is not None and context.model_api_key is not None
+            )
+            if not runtime_key_was_supplied:
+                raise RuntimeError("Set MODEL_API_KEY.")
+
+            model_api_key = "not-required"
+
+        mcp_api_key = os.getenv("SUPERSET_MCP_API_KEY", "").strip()
+
         return cls(
-            provider=provider,
-            openrouter_api_key=SecretStr(api_key) if api_key else None,
-            openrouter_base_url=os.getenv(
-                "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"
-            ).rstrip("/"),
-            openrouter_model=os.getenv("OPENROUTER_MODEL", "liquid/lfm-2.5-2.6b:free"),
-            ollama_model=os.getenv("OLLAMA_MODEL", "LiquidAI/lfm2.5-2.6b:q4_k_m"),
-            ollama_base_url=os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip(
-                "/"
-            ),
-            ollama_num_ctx=ollama_num_ctx,
-            superset_mcp_url=os.getenv("SUPERSET_MCP_URL", "http://localhost:5008/mcp"),
+            model_name=model_name,
+            model_base_url=model_base_url,
+            model_api_key=SecretStr(model_api_key),
+            superset_mcp_url=os.getenv(
+                "SUPERSET_MCP_URL",
+                "http://localhost:5008/mcp",
+            ).strip(),
             superset_default_dataset=os.getenv(
-                "SUPERSET_DEFAULT_DATASET", "wb_health_population"
-            ),
-            superset_mcp_api_key=SecretStr(mcp_api_key) if mcp_api_key else None,
+                "SUPERSET_DEFAULT_DATASET",
+                "wb_health_population",
+            ).strip(),
+            superset_mcp_api_key=(SecretStr(mcp_api_key) if mcp_api_key else None),
         )

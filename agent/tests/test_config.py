@@ -1,90 +1,152 @@
-"""Tests for model-provider configuration."""
+"""Tests for agent configuration."""
 
 from __future__ import annotations
 
 import pytest
-from langchain_ollama import ChatOllama
-from langchain_openrouter import ChatOpenRouter
 
-from agent.agent import create_chat_model
-from agent.config import AgentSettings
+from agent.config import AgentContext, AgentSettings
 
 
 SETTINGS_ENV_VARS = (
-    "PROVIDER",
-    "OLLAMA_MODEL",
-    "OLLAMA_HOST",
-    "OLLAMA_NUM_CTX",
-    "OPENROUTER_API_KEY",
-    "OPENROUTER_BASE_URL",
-    "OPENROUTER_MODEL",
+    "MODEL_NAME",
+    "MODEL_BASE_URL",
+    "MODEL_API_KEY",
+    "SUPERSET_MCP_URL",
     "SUPERSET_MCP_API_KEY",
+    "SUPERSET_DEFAULT_DATASET",
 )
 
 
 @pytest.fixture(autouse=True)
-def clear_model_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+def clear_settings_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     for variable in SETTINGS_ENV_VARS:
         monkeypatch.delenv(variable, raising=False)
 
 
-def test_ollama_is_the_default_provider() -> None:
+def set_required_model_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MODEL_NAME", "environment-model")
+    monkeypatch.setenv("MODEL_BASE_URL", "https://provider.example/v1/")
+    monkeypatch.setenv("MODEL_API_KEY", "environment-key")
+
+
+def test_loads_model_configuration_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    set_required_model_environment(monkeypatch)
+
     settings = AgentSettings.from_env()
 
-    assert settings.provider == "ollama"
-    assert settings.ollama_model == "LiquidAI/lfm2.5-2.6b:q4_k_m"
-    assert settings.ollama_base_url == "http://127.0.0.1:11434"
-    assert settings.ollama_num_ctx == 32768
-    assert settings.openrouter_api_key is None
+    assert settings.model_name == "environment-model"
+    assert settings.model_base_url == "https://provider.example/v1"
+    assert settings.model_api_key.get_secret_value() == "environment-key"
+
+
+@pytest.mark.parametrize(
+    ("missing_variable", "error_message"),
+    [
+        ("MODEL_NAME", "MODEL_NAME"),
+        ("MODEL_BASE_URL", "MODEL_BASE_URL"),
+        ("MODEL_API_KEY", "MODEL_API_KEY"),
+    ],
+)
+def test_requires_environment_model_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+    missing_variable: str,
+    error_message: str,
+) -> None:
+    set_required_model_environment(monkeypatch)
+    monkeypatch.delenv(missing_variable)
+
+    with pytest.raises(RuntimeError, match=error_message):
+        AgentSettings.from_env()
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "provider.example/v1",
+        "ftp://provider.example/v1",
+        "https:///missing-host",
+    ],
+)
+def test_rejects_invalid_model_base_url(
+    monkeypatch: pytest.MonkeyPatch,
+    base_url: str,
+) -> None:
+    set_required_model_environment(monkeypatch)
+    monkeypatch.setenv("MODEL_BASE_URL", base_url)
+
+    with pytest.raises(RuntimeError, match=r"valid HTTP\(S\) URL"):
+        AgentSettings.from_env()
+
+
+def test_runtime_context_overrides_model_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    set_required_model_environment(monkeypatch)
+    context = AgentContext(
+        model_name=" runtime-model ",
+        model_base_url="https://runtime.example/v1/",
+        model_api_key=" runtime-key ",
+    )
+
+    settings = AgentSettings.from_env(context)
+
+    assert settings.model_name == "runtime-model"
+    assert settings.model_base_url == "https://runtime.example/v1"
+    assert settings.model_api_key.get_secret_value() == "runtime-key"
+
+
+def test_partial_runtime_context_uses_environment_fallbacks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    set_required_model_environment(monkeypatch)
+
+    settings = AgentSettings.from_env(AgentContext(model_name="runtime-model"))
+
+    assert settings.model_name == "runtime-model"
+    assert settings.model_base_url == "https://provider.example/v1"
+    assert settings.model_api_key.get_secret_value() == "environment-key"
+
+
+def test_explicitly_empty_runtime_api_key_uses_placeholder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    set_required_model_environment(monkeypatch)
+
+    settings = AgentSettings.from_env(AgentContext(model_api_key=""))
+
+    assert settings.model_api_key.get_secret_value() == "not-required"
+
+
+def test_explicitly_empty_runtime_model_does_not_use_environment_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    set_required_model_environment(monkeypatch)
+
+    with pytest.raises(RuntimeError, match="MODEL_NAME"):
+        AgentSettings.from_env(AgentContext(model_name=""))
+
+
+def test_uses_superset_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_required_model_environment(monkeypatch)
+
+    settings = AgentSettings.from_env()
+
+    assert settings.superset_mcp_url == "http://localhost:5008/mcp"
+    assert settings.superset_default_dataset == "wb_health_population"
     assert settings.superset_mcp_api_key is None
 
-    model = create_chat_model(settings)
-    assert isinstance(model, ChatOllama)
-    assert model.model == settings.ollama_model
-    assert model.base_url == settings.ollama_base_url
-    assert model.num_ctx == settings.ollama_num_ctx
 
-
-def test_openrouter_uses_its_lfm_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PROVIDER", "openrouter")
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-
-    settings = AgentSettings.from_env()
-    model = create_chat_model(settings)
-
-    assert settings.openrouter_model == "liquid/lfm-2.5-2.6b:free"
-    assert isinstance(model, ChatOpenRouter)
-    assert model.model_name == settings.openrouter_model
-
-
-def test_openrouter_requires_an_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PROVIDER", "openrouter")
-
-    with pytest.raises(RuntimeError, match="OPENROUTER_API_KEY"):
-        AgentSettings.from_env()
-
-
-def test_superset_mcp_api_key_is_optional(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SUPERSET_MCP_API_KEY", "test-mcp-key")
+def test_loads_superset_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_required_model_environment(monkeypatch)
+    monkeypatch.setenv("SUPERSET_MCP_URL", "https://superset.example/mcp")
+    monkeypatch.setenv("SUPERSET_DEFAULT_DATASET", "sales")
+    monkeypatch.setenv("SUPERSET_MCP_API_KEY", " test-mcp-key ")
 
     settings = AgentSettings.from_env()
 
+    assert settings.superset_mcp_url == "https://superset.example/mcp"
+    assert settings.superset_default_dataset == "sales"
     assert settings.superset_mcp_api_key is not None
     assert settings.superset_mcp_api_key.get_secret_value() == "test-mcp-key"
-
-
-def test_rejects_unknown_provider(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PROVIDER", "other")
-
-    with pytest.raises(RuntimeError, match="PROVIDER"):
-        AgentSettings.from_env()
-
-
-@pytest.mark.parametrize("value", ["0", "-1", "not-a-number"])
-def test_rejects_invalid_ollama_context(
-    monkeypatch: pytest.MonkeyPatch, value: str
-) -> None:
-    monkeypatch.setenv("OLLAMA_NUM_CTX", value)
-
-    with pytest.raises(RuntimeError, match="OLLAMA_NUM_CTX"):
-        AgentSettings.from_env()
