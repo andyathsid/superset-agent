@@ -8,8 +8,7 @@ import { createLangGraphThreadListAdapter } from "../runtime/langgraph-thread-li
 
 export function useAssistantRuntime() {
   const apiUrl =
-    process.env.NEXT_PUBLIC_LANGGRAPH_API_URL ||
-    (typeof window !== "undefined" ? new URL("/api", window.location.href).href : undefined);
+    typeof window !== "undefined" ? new URL("/api", window.location.href).href : undefined;
 
   const client = useMemo(() => new Client({ apiUrl }), [apiUrl]);
 

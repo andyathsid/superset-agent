@@ -1,18 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { OPENROUTER_TESTING_MODEL } from "@/features/assistant/config/models";
 
 export const runtime = "nodejs";
 
 const ALLOWED_METHODS = "GET, POST, PUT, PATCH, DELETE, OPTIONS";
+const MODEL_NAME = "minimax/minimax-m3.1-flash:free";
+const MODEL_BASE_URL = "https://openrouter.ai/api/v1";
 
 type LangGraphRunRequest = {
-  config?: {
-    configurable?: {
-      model_name?: unknown;
-      model_base_url?: unknown;
-      model_api_key?: unknown;
-    };
-  };
+  context?: Record<string, unknown>;
 };
 
 type LangGraphCommandRequest = LangGraphRunRequest & {
@@ -37,10 +32,7 @@ function isAllowedRequestContext(req: NextRequest) {
 }
 
 function crossOriginResponse() {
-  return NextResponse.json(
-    { error: "Cross-origin requests are not allowed." },
-    { status: 403 },
-  );
+  return NextResponse.json({ error: "Cross-origin requests are not allowed." }, { status: 403 });
 }
 
 async function handleRequest(req: NextRequest, method: string) {
@@ -49,19 +41,14 @@ async function handleRequest(req: NextRequest, method: string) {
   try {
     const apiUrl = process.env.LANGGRAPH_API_URL?.trim();
     if (!apiUrl) {
-      return NextResponse.json(
-        { error: "LANGGRAPH_API_URL is not configured." },
-        { status: 503 },
-      );
+      return NextResponse.json({ error: "LANGGRAPH_API_URL is not configured." }, { status: 503 });
     }
 
     const path = req.nextUrl.pathname.replace(/^\/?api\//, "");
     const searchParams = new URLSearchParams(req.nextUrl.search);
     searchParams.delete("_path");
     searchParams.delete("nxtP_path");
-    const queryString = searchParams.toString()
-      ? `?${searchParams.toString()}`
-      : "";
+    const queryString = searchParams.toString() ? `?${searchParams.toString()}` : "";
 
     const headers = new Headers();
     const apiKey = process.env.LANGCHAIN_API_KEY?.trim();
@@ -83,20 +70,18 @@ async function handleRequest(req: NextRequest, method: string) {
     if (["POST", "PUT", "PATCH"].includes(method)) {
       let body = await req.text();
 
-      if (contentType?.includes("application/json")) {
+      if (method === "POST" && contentType?.includes("application/json")) {
         try {
           const payload = JSON.parse(body) as LangGraphCommandRequest;
           // Agent Protocol commands wrap run configuration in `params`.
           const runRequest =
             payload.method === "run.start" || payload.method === "input.respond"
-              ? payload.params
-              : payload;
-          const configurable = runRequest?.config?.configurable;
+              ? (payload.params ??= {})
+              : /^(?:threads\/[^/]+\/)?runs(?:\/(?:stream|wait))?$/.test(path)
+                ? payload
+                : undefined;
 
-          if (
-            configurable?.model_name === OPENROUTER_TESTING_MODEL.name &&
-            configurable.model_base_url === OPENROUTER_TESTING_MODEL.baseUrl
-          ) {
+          if (runRequest) {
             const testingApiKey = process.env.OPENROUTER_TESTING_API_KEY?.trim();
 
             if (!testingApiKey) {
@@ -106,7 +91,12 @@ async function handleRequest(req: NextRequest, method: string) {
               );
             }
 
-            configurable.model_api_key = testingApiKey;
+            runRequest.context = {
+              ...runRequest.context,
+              model_name: MODEL_NAME,
+              model_base_url: MODEL_BASE_URL,
+              model_api_key: testingApiKey,
+            };
             body = JSON.stringify(payload);
           }
         } catch {
@@ -154,10 +144,7 @@ async function handleRequest(req: NextRequest, method: string) {
   } catch (e: unknown) {
     if (e instanceof Error) {
       const typedError = e as Error & { status?: number };
-      return NextResponse.json(
-        { error: typedError.message },
-        { status: typedError.status ?? 500 },
-      );
+      return NextResponse.json({ error: typedError.message }, { status: typedError.status ?? 500 });
     }
     return NextResponse.json({ error: "Unknown error" }, { status: 500 });
   }

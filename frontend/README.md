@@ -11,12 +11,16 @@ between workspace routes. Page-local state can reset when its page unmounts.
 
 Assistant code lives in `features/assistant/`:
 
-- `components/`: assistant content, runtime provider, thread sidebar, and model settings.
+- `components/`: assistant content, runtime provider, and thread sidebar.
 - `components/assistant-ui/`: assistant-ui elements and their supporting utilities.
 - `hooks/`: runtime setup and attachments.
 - `runtime/`: LangGraph thread list adapter.
-- `config/`: model defaults and welcome suggestions.
-- `types/`: model connection types.
+- `config/`: welcome suggestions.
+
+The runtime uses the same-origin `/api` proxy. Model ID and base URL are fixed in
+`app/api/[..._path]/route.ts`; the API key comes from the server-only
+`OPENROUTER_TESTING_API_KEY` environment variable. The proxy supplies model
+configuration through the backend execution context for each run and resume.
 
 `features/mcp/` owns the server panel, status polling hook, and server types.
 It does not depend on assistant code. `Workspace` calls the polling hook once
