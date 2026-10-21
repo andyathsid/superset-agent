@@ -9,7 +9,7 @@ from typing import Any
 from dotenv import load_dotenv
 from langchain.agents import create_agent
 from langchain_core.language_models import BaseChatModel
-from langchain_openai import ChatOpenAI
+from langchain_openrouter import ChatOpenRouter
 from langgraph_sdk.runtime import ServerRuntime
 
 from agent.config import AgentContext, AgentSettings
@@ -19,7 +19,7 @@ from agent.tools import create_tools
 
 def create_chat_model(settings: AgentSettings) -> BaseChatModel:
     """Create a model through the OpenAI Chat Completions-compatible API."""
-    return ChatOpenAI(
+    return ChatOpenRouter(
         model=settings.model_name,
         api_key=settings.model_api_key,
         base_url=settings.model_base_url,

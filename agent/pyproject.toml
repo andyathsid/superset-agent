@@ -9,6 +9,7 @@ dependencies = [
     "python-dotenv>=1.2.4",
     "slowapi>=0.1.10",
     "langchain-openai>=1.7.2",
+    "langchain-openrouter>=0.2.9",
 ]
 
 [build-system]
