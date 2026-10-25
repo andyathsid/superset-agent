@@ -7,6 +7,7 @@ import { BoxIcon } from "lucide-react";
 import { defaultModel } from "../config/models";
 import { modelIdentity, type ModelIdentity } from "../runtime/model-config";
 import {
+  createModelChangeId,
   eventIsVisible,
   findModelCheckpoint,
   messageIds,
@@ -105,7 +106,7 @@ export function ModelThreadProvider({ children }: { children: ReactNode }) {
     store.setSelectedModel(id);
     if (!threadId || !stream || messages.length === 0) return;
     const event: ModelChangeEvent = {
-      id: crypto.randomUUID(),
+      id: createModelChangeId(),
       threadId,
       afterMessageId: messages.at(-1)?.id ?? null,
       checkpointId: null,
@@ -189,7 +190,7 @@ export function ModelThreadProvider({ children }: { children: ReactNode }) {
       const from = latestChange?.to ?? previous ?? defaultModel;
       if (from.id === model.id) return;
       const event: ModelChangeEvent = {
-        id: crypto.randomUUID(),
+        id: createModelChangeId(),
         threadId: runThreadId,
         afterMessageId: basePath.at(-1) ?? null,
         checkpointId: state.checkpoint.checkpoint_id,

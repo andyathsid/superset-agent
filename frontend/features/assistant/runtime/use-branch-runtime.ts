@@ -65,6 +65,7 @@ function useBranchThreadRuntime(options: Options) {
   const externalId = useAuiState((s) => s.threadListItem.externalId);
   const threadId = externalId ?? stream?.threadId;
   const [loaded, setLoaded] = useState<{ threadId: string; states: BranchState[] }>();
+  const [liveThreadId, setLiveThreadId] = useState<string>();
   const states = loaded && loaded.threadId === threadId ? loaded.states : EMPTY_STATES;
   const history = useMemo(() => buildBranchHistory(states), [states]);
   const [busy, setBusy] = useState(false);
@@ -73,6 +74,10 @@ function useBranchThreadRuntime(options: Options) {
   const operation = useRef(false);
   const active = useRef(threadId);
   active.current = threadId;
+
+  useEffect(() => {
+    if (threadId && snapshot.isRunning) setLiveThreadId(threadId);
+  }, [threadId, snapshot.isRunning]);
 
   useEffect(() => {
     if (!stream || !threadId || snapshot.isRunning || snapshot.isLoading || operation.current)
@@ -92,7 +97,10 @@ function useBranchThreadRuntime(options: Options) {
     };
   }, [stream?.client, threadId, snapshot.isRunning, snapshot.isLoading, reload]);
 
-  const ready = !threadId || loaded?.threadId === threadId;
+  // A new thread gets its ID during the first run, before branch history can load.
+  // Keep its live messages visible through the run and the subsequent history fetch.
+  const ready =
+    !threadId || loaded?.threadId === threadId || snapshot.isRunning || liveThreadId === threadId;
   const visibleMessages = ready || error ? snapshot.messages : [];
   const path = matchBranchPath(history, visibleMessages);
   const messages = useMemo(

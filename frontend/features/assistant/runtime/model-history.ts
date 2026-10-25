@@ -3,6 +3,13 @@ import type { ModelIdentity } from "./model-config";
 
 export const MODEL_EVENT_PREFIX = "model_change_";
 
+export function createModelChangeId(): string {
+  // getRandomValues also works on HTTP origins where randomUUID is unavailable.
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
 export type ModelChangeEvent = {
   id: string;
   threadId: string;

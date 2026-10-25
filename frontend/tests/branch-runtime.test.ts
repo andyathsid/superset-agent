@@ -1,17 +1,76 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Client } from "@langchain/langgraph-sdk";
+import { ExternalStoreThreadRuntimeCore, fromThreadMessageLike } from "@assistant-ui/core/internal";
 import {
   buildBranchHistory,
   convertBranchMessages,
   loadBranchHistory,
   matchBranchPath,
+  mapLiveBranchMessages,
   type BranchState,
 } from "../features/assistant/runtime/branch-history";
 import { createBranchFetch } from "../features/assistant/runtime/branch-transport";
 
 const human = (id: string, content: string) => ({ id, type: "human", content });
 const ai = (id: string, content: string) => ({ id, type: "ai", content });
+
+test("cancel can resync a branch repository before the pending assistant responds", () => {
+  const user = fromThreadMessageLike({ role: "user", content: "Hello" }, "user", {
+    type: "complete",
+    reason: "stop",
+  });
+  const pending = fromThreadMessageLike(
+    { role: "assistant", content: [], metadata: { isOptimistic: true } },
+    "inner-pending",
+    { type: "running" },
+  );
+  const messages = mapLiveBranchMessages(buildBranchHistory([]), [user, pending]);
+  assert.deepEqual(
+    messages.map((message) => message.id),
+    ["user"],
+  );
+  const repository = {
+    messages: messages.map((message, index) => ({
+      message,
+      parentId: messages[index - 1]?.id ?? null,
+    })),
+    headId: messages.at(-1)?.id ?? null,
+  };
+  const adapter = {
+    messageRepository: repository,
+    isRunning: true,
+    onNew: async () => {},
+    onCancel: async () => {},
+  };
+  const core = new ExternalStoreThreadRuntimeCore({ getModelContext: () => ({}) }, adapter);
+  core.cancelRun();
+  assert.doesNotThrow(() => core.__internal_setAdapter({ ...adapter, isRunning: false }));
+  assert.deepEqual(
+    core.messages.map((message) => message.id),
+    ["user"],
+  );
+});
+
+test("live branch mapping preserves real tool activity and cancelled assistant messages", () => {
+  const user = fromThreadMessageLike({ role: "user", content: "Check health" }, "user", {
+    type: "complete",
+    reason: "stop",
+  });
+  const assistant = fromThreadMessageLike(
+    {
+      role: "assistant",
+      content: [{ type: "tool-call", toolCallId: "call", toolName: "health_check", args: {} }],
+    },
+    "assistant",
+    { type: "incomplete", reason: "cancelled" },
+  );
+  const messages = mapLiveBranchMessages(buildBranchHistory([]), [user, assistant]);
+  assert.equal(messages.length, 2);
+  assert.equal(messages[1]?.content, assistant.content);
+  assert.equal(messages[1]?.metadata, assistant.metadata);
+  assert.equal(messages[1]?.status, assistant.status);
+});
 function state(id: string, parent: string | null, messages: object[]): BranchState {
   return {
     checkpoint: { thread_id: "thread", checkpoint_id: id, checkpoint_ns: "", checkpoint_map: {} },

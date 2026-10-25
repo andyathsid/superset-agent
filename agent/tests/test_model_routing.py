@@ -62,3 +62,21 @@ def test_response_attribution_preserves_message_and_excludes_key() -> None:
     assert updated.additional_kwargs["metadata"]["ui_model"] == middleware.identity
     assert "private-test-key" not in str(result)
     assert "ui_model" not in message.additional_kwargs["metadata"]
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_graph_needs_no_model_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from agent.agent import graph
+    from langgraph_sdk.runtime import ServerRuntime
+
+    for name in ("MODEL_API_KEY", "MODEL_NAME", "MODEL_BASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+    runtime = cast(
+        ServerRuntime[AgentContext], SimpleNamespace(execution_runtime=None)
+    )
+    async with graph(runtime) as compiled:
+        assert "messages" in compiled.get_input_jsonschema()["properties"]

@@ -19,6 +19,38 @@ type LangGraphCommandRequest = LangGraphRunRequest & {
   params?: LangGraphRunRequest;
 };
 
+function withSsePreamble(body: ReadableStream<Uint8Array>) {
+  const reader = body.getReader();
+
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      // Flush headers before a quiet channel's first event or heartbeat.
+      controller.enqueue(new TextEncoder().encode(": connected\n\n"));
+    },
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          reader.releaseLock();
+          controller.close();
+        } else {
+          controller.enqueue(value);
+        }
+      } catch (error) {
+        reader.releaseLock();
+        controller.error(error);
+      }
+    },
+    async cancel(reason) {
+      try {
+        await reader.cancel(reason);
+      } finally {
+        reader.releaseLock();
+      }
+    },
+  });
+}
+
 function isAllowedRequestContext(req: NextRequest) {
   const fetchSite = req.headers.get("sec-fetch-site");
   if (fetchSite !== null) {
@@ -177,7 +209,12 @@ async function handleRequest(req: NextRequest, method: string) {
     }
     responseHeaders.set("Cache-Control", "no-store");
 
-    return new NextResponse(res.body, {
+    const body =
+      res.body && res.headers.get("content-type")?.includes("text/event-stream")
+        ? withSsePreamble(res.body)
+        : res.body;
+
+    return new NextResponse(body, {
       status: res.status,
       statusText: res.statusText,
       headers: responseHeaders,

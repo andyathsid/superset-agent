@@ -34,6 +34,12 @@ def create_chat_model(settings: AgentSettings) -> BaseChatModel:
             timeout=None,
             stop=None,
         )
+    if settings.model_provider == "openai":
+        return ChatOpenAI(
+            model=settings.model_name,
+            api_key=settings.model_api_key,
+            base_url=settings.model_base_url,
+        )
     if settings.model_provider != "openrouter":
         return ChatOpenAI(
             model=settings.model_name,
@@ -41,6 +47,7 @@ def create_chat_model(settings: AgentSettings) -> BaseChatModel:
             base_url=settings.model_base_url,
             temperature=0,
         )
+    
     return ChatOpenRouter(
         model=settings.model_name,
         api_key=settings.model_api_key,
@@ -94,9 +101,19 @@ async def graph(
 ) -> AsyncGenerator[Any, None]:
     """Create Aegra's graph and manage MCP connections during execution."""
     execution_runtime = runtime.execution_runtime
-    settings = AgentSettings.from_env(
-        execution_runtime.context if execution_runtime else None
+    # State/history requests compile the graph without executing its model.
+    # Their context has no per-run credentials, so use an inert model adapter.
+    context = (
+        execution_runtime.context
+        if execution_runtime
+        else AgentContext(
+            model_name="checkpoint-reader",
+            model_provider="openai",
+            model_base_url="http://localhost",
+            model_api_key="",
+        )
     )
+    settings = AgentSettings.from_env(context)
 
     if execution_runtime is None:
         yield build_agent(settings, [])

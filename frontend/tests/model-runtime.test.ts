@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { assistantModels } from "../features/assistant/config/models";
 import { resolveRunModel, type RunModel } from "../features/assistant/runtime/model-config";
 import {
+  createModelChangeId,
   eventIsVisible,
   readModelEvents,
   findModelCheckpoint,
@@ -27,6 +28,19 @@ const event: ModelChangeEvent = {
   to: { id: "b", name: "New name" },
   createdAt: "2026-10-21T12:00:00Z",
 };
+
+test("model change IDs work when randomUUID is unavailable", () => {
+  const descriptor = Object.getOwnPropertyDescriptor(crypto, "randomUUID");
+  Object.defineProperty(crypto, "randomUUID", { value: undefined, configurable: true });
+  try {
+    const ids = Array.from({ length: 100 }, () => createModelChangeId());
+    assert.ok(ids.every((id) => /^[0-9a-f]{32}$/.test(id)));
+    assert.equal(new Set(ids).size, ids.length);
+  } finally {
+    if (descriptor) Object.defineProperty(crypto, "randomUUID", descriptor);
+    else Reflect.deleteProperty(crypto, "randomUUID");
+  }
+});
 
 test("retry events follow the new response branch and stay out of its sibling", () => {
   assert.equal(eventIsVisible(event, ["user-1", "answer-new", "user-2"]), true);

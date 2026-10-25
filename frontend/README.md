@@ -1,74 +1,87 @@
-# Frontend
+# Superset Agent Frontend
 
-Next.js routes, layouts, global styles, and API handlers live in `app/`.
-Routes under `app/(workspace)/` share the workspace layout. The route group does
-not add a URL segment, so the assistant remains at `/`. Add future workspace
-pages inside this group and use Next.js `Link` for client navigation.
+A Next.js and React chat interface built with assistant-ui. It supports streamed
+responses, tool activity, conversation history, message edits, response branches,
+model selection, and Superset MCP connection status.
 
-The workspace layout mounts `AssistantProvider` once around `Workspace` and the
-current page. The runtime, sidebar state, and MCP polling survive navigation
-between workspace routes. Page-local state can reset when its page unmounts.
+Requests go through the Next.js `/api` proxy to the
+[Aegra backend](../agent/README.md).
 
-Assistant code lives in `features/assistant/`:
+## Requirements
 
-- `components/`: assistant content, runtime provider, and thread sidebar.
-- `components/assistant-ui/`: assistant-ui elements and their supporting utilities.
-- `hooks/`: runtime setup and attachments.
-- `runtime/`: LangGraph thread list adapter.
-- `config/`: welcome suggestions.
+- Node.js 22 LTS or newer and npm.
+- The agent backend running locally at `http://localhost:2026`.
 
-The runtime uses the same-origin `/api` proxy. Model ID and base URL are fixed in
-`app/api/[..._path]/route.ts`; the API key comes from the server-only
-`OPENROUTER_TESTING_API_KEY` environment variable. The proxy supplies model
-configuration through the backend execution context for each run and resume.
+## Run locally
 
-`features/mcp/` owns the server panel, status polling hook, and server types.
-It does not depend on assistant code. `Workspace` calls the polling hook once
-and supplies the same data and open state to desktop and mobile panels.
+From the repository root:
 
-`features/workspace/` composes the assistant sidebar and MCP panel. It owns the
-sidebar cookie definition, retaining the existing cookie name for compatibility.
-This composition layer can import other features; assistant and MCP remain
-independent of each other.
-
-`components/layout/app-shell.tsx` owns desktop collapse, pointer and keyboard
-resize, and the mobile sheet. It accepts a sidebar render function with
-`collapsed` and `closeMobileSidebar` controls. Feature sidebar components call
-the close callback after navigation. The shell has no assistant or MCP imports.
-
-Shared UI primitives stay in `components/ui/`. Generic hooks and utilities stay
-in `hooks/` and `lib/`. Extract assistant code into those shared folders when
-another feature needs it. Shared code must not import from `features/` or `app/`.
-
-Keep cookie server and client helpers in separate modules. Import
-`lib/cookies/server` only from server code.
-
-## Adding components
-
-Run installation commands from `frontend/`. Keep the default aliases in
-`components.json` so other registries do not install into the assistant feature.
-
-For a single-file assistant-ui element such as logos, set its destination:
-
-```sh
-npx shadcn@latest add "@assistant-ui/logos" \
-  --path features/assistant/components/assistant-ui/elements
+```bash
+cd frontend
+npm ci
 ```
 
-Review imports after installation. For multi-file items, `--path` can flatten
-directories and affect dependency destinations. Check the generated diff and
-keep shadcn primitives in `components/ui/` and assistant hooks in the feature.
+Copy the example configuration:
 
-Install shadcn primitives with the default command:
-
-```sh
-npx shadcn@latest add button
+```bash
+cp .env.example .env.local
 ```
 
-## Verification
+The default connection values are:
 
-```sh
+```dotenv
+LANGGRAPH_API_URL=http://localhost:2026
+NEXT_PUBLIC_LANGGRAPH_ASSISTANT_ID=superset_agent
+```
+
+These values match the agent in this repository. Set
+`LANGCHAIN_API_KEY` only if your backend requires an API key; the proxy forwards
+it as `x-api-key`.
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:3000`. Choose **Default Model** to use the backend's model
+configuration, then send a message such as "List the available datasets in
+Superset."
+
+## Model selection
+
+Use the model selector in chat composer to choose a provider or add a model. Hosted providers
+require an API key. Ollama accepts a local endpoint without a key. Custom models
+require an OpenAI-compatible endpoint and an API key. Model endpoints must be
+reachable from the backend process.
+
+Provider keys and added models stay in memory for the current session. Reloading
+the page clears them.
+
+By default, **Default Model** uses the backend's `MODEL_*` environment variables.
+To override it in the Next.js server, set `MODEL_PROVIDER`, `MODEL_NAME`,
+`MODEL_BASE_URL`, and `MODEL_API_KEY` in `.env.local`. These variables stay on the
+server. `OPENROUTER_TESTING_API_KEY` is also supported as a fallback key for the
+server-managed model.
+
+## Project layout
+
+- `app/`: workspace routes, layouts, global styles, and the API proxy.
+- `features/assistant/`: chat UI, thread history, model selection, and runtime.
+- `features/mcp/`: MCP server status polling and panel.
+- `features/workspace/`: workspace layout and feature composition.
+- `components/`, `hooks/`, and `lib/`: shared UI, hooks, and utilities.
+
+## Checks and build
+
+Run from `frontend/`:
+
+```bash
 npx tsc --noEmit --incremental false
 npm run lint
 npm run build
+```
+
+To serve the production build locally:
+
+```bash
+npm start
 ```

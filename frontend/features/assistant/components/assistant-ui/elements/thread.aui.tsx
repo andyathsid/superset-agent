@@ -203,7 +203,6 @@ const isNewChatView = (s: AssistantState) =>
 const isHistoryLoadingView = (s: AssistantState) =>
   s.thread.messages.length === 0 &&
   s.thread.isLoading &&
-  !s.thread.isDisabled &&
   !s.threads.isLoading;
 
 const ThreadHistorySkeleton: FC = () => (
