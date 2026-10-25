@@ -1,5 +1,6 @@
 "use client";
 
+import { useShallow } from "zustand/react/shallow";
 import { useMemo } from "react";
 import type { RemoteThreadListAdapter } from "@assistant-ui/react";
 import { useStreamRuntime } from "@assistant-ui/react-langchain";
@@ -9,15 +10,22 @@ import { createModelFetch } from "../runtime/model-transport";
 import { defaultModelId } from "../config/models";
 
 export function useAssistantRuntime() {
-  const { snapshotRef, threadModels, apiUrl, client } = useModels();
+  const { snapshot, threadModels, apiUrl, client } = useModels(
+    useShallow((state) => ({
+      snapshot: state.snapshot,
+      threadModels: state.threadModels,
+      apiUrl: state.apiUrl,
+      client: state.client,
+    })),
+  );
   const modelFetch = useMemo(
     () =>
       createModelFetch(
         async (threadId) =>
-          snapshotRef.current(threadId ? await threadModels.forRun(threadId) : defaultModelId),
-        (threadId, model) => threadModels.saveForRun(threadId, model.id),
+          snapshot(threadId ? await threadModels.getState().forRun(threadId) : defaultModelId),
+        (threadId, model) => threadModels.getState().saveForRun(threadId, model.id),
       ),
-    [snapshotRef, threadModels],
+    [snapshot, threadModels],
   );
 
   const threadListAdapter = useMemo<RemoteThreadListAdapter>(

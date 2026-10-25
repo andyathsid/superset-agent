@@ -29,7 +29,7 @@ export const createLangGraphThreadListAdapter = (
   },
 
   async initialize(localId) {
-    return threadModels.initialize(localId);
+    return threadModels.getState().initialize(localId);
   },
 
   async fetch(threadId) {

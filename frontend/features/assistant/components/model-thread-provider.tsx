@@ -1,9 +1,11 @@
 "use client";
 
-import { createContext, useContext, useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useContext, useEffect, type ReactNode } from "react";
+import { useStore } from "zustand";
 import { useAuiState } from "@assistant-ui/react";
 import { useLangChainError } from "@assistant-ui/react-langchain";
 import { useModels } from "./model-provider";
+import { getThreadModel } from "../runtime/thread-model-store";
 
 type ThreadModels = {
   selectedModel: string;
@@ -16,32 +18,30 @@ type ThreadModels = {
 const ThreadModelContext = createContext<ThreadModels | null>(null);
 
 export function ModelThreadProvider({ children }: { children: ReactNode }) {
-  const store = useModels();
+  const threadModels = useModels((state) => state.threadModels);
   const itemId = useAuiState((s) => s.threadListItem.id);
   const remoteId = useAuiState((s) => s.threadListItem.externalId);
   const running = useAuiState((s) => s.thread.isRunning);
   const loading = useAuiState((s) => s.thread.isLoading);
   const submitting = useAuiState((s) => s.composer.submission !== undefined);
   const id = remoteId ?? itemId;
-  const state = useSyncExternalStore(
-    store.threadModels.subscribe,
-    () => store.threadModels.get(id, !!remoteId),
-    () => store.threadModels.get(id, !!remoteId),
-  );
+  const state = useStore(threadModels, (store) => getThreadModel(store.states, id, !!remoteId));
 
   useEffect(() => {
-    if (remoteId) void store.threadModels.load(remoteId);
-  }, [remoteId, store.threadModels]);
+    if (remoteId) void threadModels.getState().load(remoteId);
+  }, [remoteId, threadModels]);
 
-  let unavailable: string | undefined;
-  try {
-    store.snapshotRef.current(state.modelId);
-  } catch (error) {
-    unavailable = error instanceof Error ? error.message : "The selected model is unavailable.";
-  }
+  const unavailable = useModels((store) => {
+    try {
+      store.snapshot(state.modelId);
+      return undefined;
+    } catch (error) {
+      return error instanceof Error ? error.message : "The selected model is unavailable.";
+    }
+  });
   const locked = running || loading || submitting || state.busy || !state.ready;
   const selectModel = (modelId: string) => {
-    if (!locked) void store.threadModels.select(id, modelId, !!remoteId);
+    if (!locked) void threadModels.getState().select(id, modelId, !!remoteId);
   };
 
   return (
@@ -55,7 +55,7 @@ export function ModelThreadProvider({ children }: { children: ReactNode }) {
         retryLoad:
           remoteId && !state.ready && !state.busy
             ? () => {
-                void store.threadModels.load(remoteId);
+                void threadModels.getState().load(remoteId);
               }
             : undefined,
       }}

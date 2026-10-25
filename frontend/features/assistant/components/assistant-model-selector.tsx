@@ -1,5 +1,6 @@
 "use client";
 
+import { useShallow } from "zustand/react/shallow";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { BoxIcon, SparklesIcon, PlusIcon, LockKeyholeIcon } from "lucide-react";
 import { defaultFilter } from "cmdk";
@@ -61,14 +62,27 @@ const defaultOption = {
 export function AssistantModelSelector() {
   const {
     allModels,
-    setAllModels,
-    connectionsRef,
+    addModel,
+    updateModel,
+    removeModel,
     providerApiKeys,
-    setProviderApiKeys,
+    setProviderApiKey,
     customApiKeys,
-    setCustomApiKeys,
+    setCustomApiKey,
     getApiKey,
-  } = useModels();
+  } = useModels(
+    useShallow((state) => ({
+      allModels: state.allModels,
+      addModel: state.addModel,
+      updateModel: state.updateModel,
+      removeModel: state.removeModel,
+      providerApiKeys: state.providerApiKeys,
+      setProviderApiKey: state.setProviderApiKey,
+      customApiKeys: state.customApiKeys,
+      setCustomApiKey: state.setCustomApiKey,
+      getApiKey: state.getApiKey,
+    })),
+  );
   const { selectedModel, locked, selectModel } = useThreadModels();
   const [actionTarget, setActionTarget] = useState<{
     model: AssistantModel;
@@ -297,23 +311,12 @@ export function AssistantModelSelector() {
           onClose={closeModelAction}
           onSave={(changes) => {
             if (locked) return;
-            setAllModels((current) =>
-              current.map((model) =>
-                model.id === actionTarget.model.id ? { ...model, ...changes } : model,
-              ),
-            );
+            updateModel(actionTarget.model.id, changes);
             closeModelAction();
           }}
           onDelete={() => {
             if (locked) return;
-            const id = actionTarget.model.id;
-            setAllModels((current) => current.filter((model) => model.id !== id));
-            connectionsRef.current.delete(id);
-            setCustomApiKeys((current) => {
-              const next = { ...current };
-              delete next[id];
-              return next;
-            });
+            removeModel(actionTarget.model.id);
             closeModelAction();
           }}
         />
@@ -329,9 +332,8 @@ export function AssistantModelSelector() {
           onClose={closeKeyDialog}
           onSave={(apiKey) => {
             if (locked) return;
-            if (keyTarget.provider)
-              setProviderApiKeys((current) => ({ ...current, [keyTarget.provider!]: apiKey }));
-            else setCustomApiKeys((current) => ({ ...current, [keyTarget.modelId!]: apiKey }));
+            if (keyTarget.provider) setProviderApiKey(keyTarget.provider, apiKey);
+            else setCustomApiKey(keyTarget.modelId!, apiKey);
             closeKeyDialog();
           }}
         />
@@ -343,12 +345,7 @@ export function AssistantModelSelector() {
         providerApiKeys={providerApiKeys}
         onAdd={(model, connection, apiKey) => {
           if (locked) return;
-          if (model.provider === "custom")
-            setCustomApiKeys((current) => ({ ...current, [model.id]: apiKey }));
-          else if (model.provider !== "ollama")
-            setProviderApiKeys((current) => ({ ...current, [model.provider]: apiKey }));
-          connectionsRef.current.set(model.id, connection);
-          setAllModels((current) => [...current, model]);
+          addModel(model, connection, apiKey);
           selectModel(model.id);
           setAddDialogOpen(false);
         }}

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Client } from "@langchain/langgraph-sdk";
 import { defaultModelId } from "../features/assistant/config/models";
-import { ThreadModelStore } from "../features/assistant/runtime/thread-model-store";
+import { createThreadModelStore } from "../features/assistant/runtime/thread-model-store";
 
 type SavedThread = { thread_id: string; metadata?: Record<string, unknown> };
 type Threads = {
@@ -14,9 +14,9 @@ function storeWith(threads: Partial<Threads> = {}) {
   const unexpected = async () => {
     throw new Error("Unexpected client call");
   };
-  return new ThreadModelStore({
+  return createThreadModelStore({
     threads: { get: unexpected, create: unexpected, update: unexpected, ...threads },
-  } as unknown as Client);
+  } as unknown as Client).getState();
 }
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -39,6 +39,23 @@ test("new drafts use default and keep selections independent", async () => {
   assert.equal(store.get("draft-A", false).modelId, "openai/gpt-4.1");
   assert.equal(store.get("draft-B", false).modelId, defaultModelId);
   assert.equal(store.get("remote-A", true).ready, false);
+});
+
+test("thread updates preserve previous snapshots and other threads' selector values", async () => {
+  const store = createThreadModelStore({} as Client);
+  const initial = store.getState();
+  const draftB = initial.get("draft-B", false);
+  const updates: unknown[] = [];
+  const unsubscribe = store.subscribe((state) => updates.push(state));
+  await initial.select("draft-A", "custom/model", false);
+  assert.equal(updates.length, 1);
+  assert.equal(initial.states.size, 0);
+  assert.notEqual(store.getState().states, initial.states);
+  assert.equal(store.getState().get("draft-B", false), draftB);
+  assert.equal(store.getState().get("draft-A", false).modelId, "custom/model");
+  unsubscribe();
+  await initial.select("draft-A", "other/model", false);
+  assert.equal(updates.length, 1);
 });
 
 test("initialization persists only draft model identity and registers the remote thread", async () => {

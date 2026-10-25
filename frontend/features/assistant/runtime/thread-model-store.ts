@@ -1,3 +1,4 @@
+import { createStore } from "zustand/vanilla";
 import type { Client } from "@langchain/langgraph-sdk";
 import { defaultModelId } from "../config/models";
 
@@ -15,114 +16,127 @@ export const newThreadModel: ThreadModelState = {
 };
 const unloaded: ThreadModelState = { ...newThreadModel, ready: false };
 
-export class ThreadModelStore {
-  private states = new Map<string, ThreadModelState>();
-  private pending = new Map<string, Promise<void>>();
-  private listeners = new Set<() => void>();
+export function getThreadModel(
+  states: ReadonlyMap<string, ThreadModelState>,
+  id: string,
+  remote: boolean,
+): ThreadModelState {
+  return states.get(id) ?? (remote ? unloaded : newThreadModel);
+}
 
-  constructor(private client: Client) {}
+type ThreadModels = {
+  states: ReadonlyMap<string, ThreadModelState>;
+  get: (id: string, remote: boolean) => ThreadModelState;
+  load: (id: string) => Promise<void>;
+  select: (id: string, modelId: string, remote: boolean) => Promise<void>;
+  initialize: (localId: string) => Promise<{ remoteId: string; externalId: string }>;
+  forRun: (id: string) => Promise<string>;
+  saveForRun: (id: string, modelId: string) => Promise<void>;
+};
 
-  subscribe = (listener: () => void) => {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  };
+export type ThreadModelStore = ReturnType<typeof createThreadModelStore>;
 
-  get = (id: string, remote: boolean): ThreadModelState =>
-    this.states.get(id) ?? (remote ? unloaded : newThreadModel);
-
-  private set(id: string, state: ThreadModelState) {
-    this.states.set(id, state);
-    for (const listener of this.listeners) listener();
-  }
-
-  load(id: string): Promise<void> {
-    const pending = this.pending.get(id);
-    if (pending) return pending;
-    const operation = this.client.threads
-      .get(id)
-      .then(
-        (thread) => {
-          const saved = thread.metadata?.selected_model_id;
-          this.set(id, {
-            modelId: typeof saved === "string" && saved ? saved : defaultModelId,
-            ready: true,
-            busy: false,
-          });
-        },
-        () => {
-          this.set(id, {
-            ...this.get(id, true),
-            ready: false,
-            busy: false,
-            error: "Could not load this thread's model. Retry before sending a message.",
-          });
-        },
-      )
-      .finally(() => this.pending.delete(id));
-    this.pending.set(id, operation);
-    this.set(id, { ...this.get(id, true), ready: false, busy: true, error: undefined });
-    return operation;
-  }
-
-  select(id: string, modelId: string, remote: boolean): Promise<void> {
-    const current = this.get(id, remote);
-    if (!current.ready || current.busy || current.modelId === modelId) return Promise.resolve();
-    if (!remote) {
-      this.set(id, { modelId, ready: true, busy: false });
-      return Promise.resolve();
+export function createThreadModelStore(client: Client) {
+  const pending = new Map<string, Promise<void>>();
+  return createStore<ThreadModels>()((set, get) => {
+    function setThread(id: string, state: ThreadModelState) {
+      set((current) => ({ states: new Map(current.states).set(id, state) }));
     }
-    const operation = this.client.threads
-      .update(id, {
-        metadata: { selected_model_id: modelId },
-      })
-      .then(
-        () => this.set(id, { modelId, ready: true, busy: false }),
-        () =>
-          this.set(id, {
-            ...current,
-            error: "Could not save the model selection. Your previous model is still selected.",
-          }),
-      )
-      .finally(() => this.pending.delete(id));
-    this.pending.set(id, operation);
-    this.set(id, { modelId, ready: true, busy: true });
-    return operation;
-  }
 
-  async initialize(localId: string) {
-    const { modelId } = this.get(localId, false);
-    const thread = await this.client.threads.create({ metadata: { selected_model_id: modelId } });
-    this.set(thread.thread_id, { modelId, ready: true, busy: false });
-    return { remoteId: thread.thread_id, externalId: thread.thread_id };
-  }
+    return {
+      states: new Map(),
+      get: (id, remote) => getThreadModel(get().states, id, remote),
+      load(id) {
+        const existing = pending.get(id);
+        if (existing) return existing;
+        const operation = client.threads
+          .get(id)
+          .then(
+            (thread) => {
+              const saved = thread.metadata?.selected_model_id;
+              setThread(id, {
+                modelId: typeof saved === "string" && saved ? saved : defaultModelId,
+                ready: true,
+                busy: false,
+              });
+            },
+            () => {
+              setThread(id, {
+                ...get().get(id, true),
+                ready: false,
+                busy: false,
+                error: "Could not load this thread's model. Retry before sending a message.",
+              });
+            },
+          )
+          .finally(() => pending.delete(id));
+        pending.set(id, operation);
+        setThread(id, { ...get().get(id, true), ready: false, busy: true, error: undefined });
+        return operation;
+      },
 
-  async forRun(id: string): Promise<string> {
-    if (!this.states.has(id)) await this.load(id);
-    await this.pending.get(id);
-    const state = this.get(id, true);
-    if (!state.ready) throw new Error(state.error ?? "The thread's model is not ready.");
-    return state.modelId;
-  }
+      select(id, modelId, remote) {
+        const current = get().get(id, remote);
+        if (!current.ready || current.busy || current.modelId === modelId) return Promise.resolve();
+        if (!remote) {
+          setThread(id, { modelId, ready: true, busy: false });
+          return Promise.resolve();
+        }
+        const operation = client.threads
+          .update(id, {
+            metadata: { selected_model_id: modelId },
+          })
+          .then(
+            () => setThread(id, { modelId, ready: true, busy: false }),
+            () =>
+              setThread(id, {
+                ...current,
+                error: "Could not save the model selection. Your previous model is still selected.",
+              }),
+          )
+          .finally(() => pending.delete(id));
+        pending.set(id, operation);
+        setThread(id, { modelId, ready: true, busy: true });
+        return operation;
+      },
 
-  async saveForRun(id: string, modelId: string): Promise<void> {
-    await this.pending.get(id);
-    const current = this.get(id, true);
-    if (!current.ready) throw new Error(current.error ?? "The thread's model is not ready.");
-    let failed = false;
-    const error = "Could not save the model selection. The message was not sent. Retry sending.";
-    const operation = this.client.threads
-      .update(id, { metadata: { selected_model_id: modelId } })
-      .then(
-        () => this.set(id, { ...current, busy: false, error: undefined }),
-        () => {
-          failed = true;
-          this.set(id, { ...current, busy: false, error });
-        },
-      )
-      .finally(() => this.pending.delete(id));
-    this.pending.set(id, operation);
-    this.set(id, { ...current, busy: true, error: undefined });
-    await operation;
-    if (failed) throw new Error(error);
-  }
+      async initialize(localId) {
+        const { modelId } = get().get(localId, false);
+        const thread = await client.threads.create({ metadata: { selected_model_id: modelId } });
+        setThread(thread.thread_id, { modelId, ready: true, busy: false });
+        return { remoteId: thread.thread_id, externalId: thread.thread_id };
+      },
+
+      async forRun(id) {
+        if (!get().states.has(id)) await get().load(id);
+        await pending.get(id);
+        const state = get().get(id, true);
+        if (!state.ready) throw new Error(state.error ?? "The thread's model is not ready.");
+        return state.modelId;
+      },
+
+      async saveForRun(id, modelId) {
+        await pending.get(id);
+        const current = get().get(id, true);
+        if (!current.ready) throw new Error(current.error ?? "The thread's model is not ready.");
+        let failed = false;
+        const error =
+          "Could not save the model selection. The message was not sent. Retry sending.";
+        const operation = client.threads
+          .update(id, { metadata: { selected_model_id: modelId } })
+          .then(
+            () => setThread(id, { ...current, busy: false, error: undefined }),
+            () => {
+              failed = true;
+              setThread(id, { ...current, busy: false, error });
+            },
+          )
+          .finally(() => pending.delete(id));
+        pending.set(id, operation);
+        setThread(id, { ...current, busy: true, error: undefined });
+        await operation;
+        if (failed) throw new Error(error);
+      },
+    };
+  });
 }
