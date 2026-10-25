@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import { useId, useState, type SubmitEvent } from "react";
 import { EllipsisIcon, PencilIcon, SettingsIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -107,7 +107,7 @@ export function ModelActionDialog({
   const [description, setDescription] = useState(model.description);
   const [error, setError] = useState("");
   const deleting = action === "delete";
-  function submit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!name.trim()) {
       setError("Enter a model name. Spaces alone are not allowed.");

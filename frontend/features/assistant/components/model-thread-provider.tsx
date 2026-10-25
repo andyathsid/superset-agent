@@ -1,8 +1,8 @@
 "use client";
 
-import { createContext, useContext, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
 import { useStore } from "zustand";
-import { useAuiState } from "@assistant-ui/react";
+import { useAui, useAuiState, type RunConfig } from "@assistant-ui/react";
 import { useLangChainError } from "@assistant-ui/react-langchain";
 import { useModels } from "./model-provider";
 import { getThreadModel } from "../runtime/thread-model-store";
@@ -14,11 +14,14 @@ type ThreadModels = {
   selectModel: (id: string) => void;
   error: string | undefined;
   retryLoad: (() => void) | undefined;
+  runConfig: RunConfig | undefined;
 };
 const ThreadModelContext = createContext<ThreadModels | null>(null);
 
 export function ModelThreadProvider({ children }: { children: ReactNode }) {
-  const threadModels = useModels((state) => state.threadModels);
+  const models = useModels((state) => state);
+  const { threadModels } = models;
+  const aui = useAui();
   const itemId = useAuiState((s) => s.threadListItem.id);
   const remoteId = useAuiState((s) => s.threadListItem.externalId);
   const running = useAuiState((s) => s.thread.isRunning);
@@ -31,14 +34,25 @@ export function ModelThreadProvider({ children }: { children: ReactNode }) {
     if (remoteId) void threadModels.getState().load(remoteId);
   }, [remoteId, threadModels]);
 
-  const unavailable = useModels((store) => {
+  const { runConfig, unavailable } = useMemo(() => {
     try {
-      store.snapshot(state.modelId);
-      return undefined;
+      return {
+        runConfig: { custom: { model_selection: models.snapshot(state.modelId) } },
+        unavailable: undefined,
+      };
     } catch (error) {
-      return error instanceof Error ? error.message : "The selected model is unavailable.";
+      return {
+        runConfig: undefined,
+        unavailable: error instanceof Error ? error.message : "The selected model is unavailable.",
+      };
     }
-  });
+  }, [models, state.modelId]);
+
+  useEffect(() => {
+    // Remote runtimes expose an inert placeholder until the thread is attached.
+    if (loading) return;
+    aui.composer.setRunConfig(runConfig ?? {});
+  }, [aui, id, loading, runConfig]);
   const locked = running || loading || submitting || state.busy || !state.ready;
   const selectModel = (modelId: string) => {
     if (!locked) void threadModels.getState().select(id, modelId, !!remoteId);
@@ -52,6 +66,7 @@ export function ModelThreadProvider({ children }: { children: ReactNode }) {
         canSend: !locked && !unavailable,
         selectModel,
         error: state.error ?? unavailable,
+        runConfig,
         retryLoad:
           remoteId && !state.ready && !state.busy
             ? () => {

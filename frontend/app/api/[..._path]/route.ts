@@ -10,6 +10,7 @@ const ALLOWED_METHODS = "GET, POST, PUT, PATCH, DELETE, OPTIONS";
 
 type LangGraphRunRequest = {
   context?: Record<string, unknown>;
+  config?: { configurable?: Record<string, unknown>; [key: string]: unknown };
   model_selection?: unknown;
   metadata?: Record<string, unknown>;
 };
@@ -129,9 +130,14 @@ async function handleRequest(req: NextRequest, method: string) {
                 : undefined;
 
           if (runRequest) {
-            const selection = runRequest.model_selection;
+            const selection =
+              runRequest.config?.configurable?.model_selection ?? runRequest.model_selection;
             const context = resolveModelContext(selection ?? { id: "default" });
             delete runRequest.model_selection;
+            // Keep browser credentials out of persisted configurable/checkpoint state.
+            if (runRequest.config?.configurable) {
+              delete runRequest.config.configurable.model_selection;
+            }
             const {
               model_provider: _provider,
               model_name: _name,
@@ -169,10 +175,31 @@ async function handleRequest(req: NextRequest, method: string) {
                 : {}),
             };
             body = JSON.stringify(payload);
+            const threadPath = path.match(/^threads\/[^/]+\//)?.[0];
+            if (threadPath) {
+              const saved = await fetch(`${apiUrl}/${threadPath.slice(0, -1)}`, {
+                ...options,
+                method: "PATCH",
+                body: JSON.stringify({
+                  metadata: { selected_model_id: runRequest.context.model_selection_id },
+                }),
+              });
+              await saved.body?.cancel();
+              if (!saved.ok) {
+                return NextResponse.json(
+                  {
+                    error:
+                      "Could not save the model selection. The message was not sent. Retry sending.",
+                  },
+                  { status: 502 },
+                );
+              }
+            }
           }
         } catch (error) {
           if (error instanceof ModelRequestError)
             return NextResponse.json({ error: error.message }, { status: 400 });
+          if (!(error instanceof SyntaxError)) throw error;
           // Forward malformed JSON unchanged so LangGraph can report it.
         }
       }
@@ -222,10 +249,7 @@ async function handleRequest(req: NextRequest, method: string) {
   } catch (e: unknown) {
     if (e instanceof Error) {
       const typedError = e as Error & { status?: number };
-      return NextResponse.json(
-        { error: typedError.message },
-        { status: typedError.status ?? 500 },
-      );
+      return NextResponse.json({ error: typedError.message }, { status: typedError.status ?? 500 });
     }
     return NextResponse.json({ error: "Unknown error" }, { status: 500 });
   }

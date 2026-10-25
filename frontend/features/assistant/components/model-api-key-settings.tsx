@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import { useId, useState, type SubmitEvent } from "react";
 import { EyeIcon, EyeOffIcon, SettingsIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,7 +87,7 @@ export function ApiKeyDialog({
   const [draft, setDraft] = useState(apiKey);
   const [visible, setVisible] = useState(false);
   const [error, setError] = useState("");
-  function submit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!draft.trim()) {
       setError("Enter an API key. Spaces alone are not allowed.");

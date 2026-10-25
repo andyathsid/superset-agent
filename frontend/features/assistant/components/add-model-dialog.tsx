@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import { useId, useState, type SubmitEvent } from "react";
 import { EyeIcon, EyeOffIcon, PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -83,7 +83,7 @@ function AddModelForm({
   const [error, setError] = useState("");
   const policy = providerConnections[provider];
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const modelId = String(data.get("modelId") ?? "").trim();

@@ -527,8 +527,8 @@ function ToolFallbackApprovalReceipt({
   ...props
 }: React.ComponentPropsWithoutRef<"div"> & {
   approval: NonNullable<ToolCallMessagePart["approval"]>;
-  focusReceiptRef: React.MutableRefObject<string | null | undefined>;
-  receiptRef: React.MutableRefObject<HTMLDivElement | null>;
+  focusReceiptRef: React.RefObject<string | null | undefined>;
+  receiptRef: React.RefObject<HTMLDivElement | null>;
 }) {
   useLayoutEffect(() => {
     const shouldFocus = focusReceiptRef.current === approval.id;
@@ -812,7 +812,7 @@ function ToolFallbackApprovalImpl({
   ...props
 }: Omit<ToolFallbackApprovalProps, "ref"> & {
   forwardedRef: React.ForwardedRef<HTMLDivElement>;
-  carryFocusRef: React.MutableRefObject<boolean>;
+  carryFocusRef: React.RefObject<boolean>;
 }) {
   const [submitted, setSubmitted] = useState(false);
   const voiceActive = useAuiState((s) => s.thread.voice !== undefined);

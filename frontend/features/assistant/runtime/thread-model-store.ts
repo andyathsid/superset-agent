@@ -31,7 +31,6 @@ type ThreadModels = {
   select: (id: string, modelId: string, remote: boolean) => Promise<void>;
   initialize: (localId: string) => Promise<{ remoteId: string; externalId: string }>;
   forRun: (id: string) => Promise<string>;
-  saveForRun: (id: string, modelId: string) => Promise<void>;
 };
 
 export type ThreadModelStore = ReturnType<typeof createThreadModelStore>;
@@ -113,29 +112,6 @@ export function createThreadModelStore(client: Client) {
         const state = get().get(id, true);
         if (!state.ready) throw new Error(state.error ?? "The thread's model is not ready.");
         return state.modelId;
-      },
-
-      async saveForRun(id, modelId) {
-        await pending.get(id);
-        const current = get().get(id, true);
-        if (!current.ready) throw new Error(current.error ?? "The thread's model is not ready.");
-        let failed = false;
-        const error =
-          "Could not save the model selection. The message was not sent. Retry sending.";
-        const operation = client.threads
-          .update(id, { metadata: { selected_model_id: modelId } })
-          .then(
-            () => setThread(id, { ...current, busy: false, error: undefined }),
-            () => {
-              failed = true;
-              setThread(id, { ...current, busy: false, error });
-            },
-          )
-          .finally(() => pending.delete(id));
-        pending.set(id, operation);
-        setThread(id, { ...current, busy: true, error: undefined });
-        await operation;
-        if (failed) throw new Error(error);
       },
     };
   });

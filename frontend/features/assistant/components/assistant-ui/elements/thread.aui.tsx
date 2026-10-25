@@ -29,7 +29,7 @@ import {
 } from "@/features/assistant/components/assistant-ui/elements/run-activity";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ThreadModelError } from "../../model-thread-provider";
+import { ThreadModelError, useThreadModels } from "../../model-thread-provider";
 import { cn } from "@/lib/utils";
 import {
   ActionBarMorePrimitive,
@@ -49,6 +49,7 @@ import {
   type TextMessagePartComponent,
   type ToolCallMessagePartComponent,
   useAuiState,
+  useAui,
 } from "@assistant-ui/react";
 import {
   ArrowDownIcon,
@@ -737,8 +738,16 @@ const RunActivityGroup: FC<{ group: ThreadGroupPart }> = ({ group }) => {
   const status = toRunActivityStatus(messageStatus ?? group.status);
 
   const isPending = status === "running" || status === "requires-action";
+  const hasFinalResponse = parts
+    .slice((group.indices.at(-1) ?? -1) + 1)
+    .some((part) => part.type === "text" && part.text.trim().length > 0);
+  const shouldCollapse = status === "complete" || hasFinalResponse;
 
-  const [open, setOpen] = useState(isPending);
+  const [open, setOpen] = useState(isPending && !shouldCollapse);
+
+  useLayoutEffect(() => {
+    if (shouldCollapse) setOpen(false);
+  }, [shouldCollapse]);
 
   const duration = reasoningDuration(group.timing);
   const settledDuration =
@@ -856,7 +865,7 @@ const AssistantMessage: FC = () => {
         data-slot="aui_assistant-message-content"
         className="text-foreground px-2 leading-relaxed wrap-break-word"
       >
-        <MessagePrimitive.GroupedParts groupBy={groupBy} indicator="always">
+        <MessagePrimitive.GroupedParts groupBy={groupBy} indicator="no-text">
           {({ part, children }) => {
             switch (part.type) {
               case "group-chainOfThought":
@@ -940,7 +949,7 @@ const AssistantMessage: FC = () => {
         data-slot="aui_assistant-message-footer"
         className={cn("ms-2 flex items-center", ACTION_BAR_HEIGHT)}
       >
-        <BranchPicker />
+        {/* <BranchPicker /> */}
         <AssistantActionBar />
       </div>
     </MessagePrimitive.Root>
@@ -948,6 +957,8 @@ const AssistantMessage: FC = () => {
 };
 
 const AssistantActionBar: FC = () => {
+  const aui = useAui();
+  const { runConfig, canSend } = useThreadModels();
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
@@ -985,6 +996,11 @@ const AssistantActionBar: FC = () => {
         </ActionBarPrimitive.FeedbackNegative>
       </AuiIf>
       <ActionBarPrimitive.Reload
+        disabled={!canSend}
+        onClick={(event) => {
+          event.preventDefault();
+          aui.message.reload({ runConfig });
+        }}
         render={<TooltipIconButton tooltip="Refresh" />}
       >
         <RefreshCwIcon />
@@ -1067,10 +1083,10 @@ const UserMessage: FC = () => {
         </div>
       </div>
 
-      <BranchPicker
+      {/* <BranchPicker
         data-slot="aui_user-branch-picker"
         className="col-span-full col-start-1 -me-1 justify-end"
-      />
+      /> */}
     </MessagePrimitive.Root>
   );
 };
@@ -1094,6 +1110,12 @@ const UserActionBar: FC = () => {
 };
 
 const EditComposer: FC = () => {
+  const aui = useAui();
+  const { runConfig, canSend } = useThreadModels();
+  useLayoutEffect(() => {
+    aui.composer.setRunConfig(runConfig ?? {});
+  }, [aui, runConfig]);
+
   return (
     <MessagePrimitive.Root
       data-slot="aui_edit-composer-wrapper"
@@ -1111,6 +1133,7 @@ const EditComposer: FC = () => {
             Cancel
           </ComposerPrimitive.Cancel>
           <ComposerPrimitive.Send
+            disabled={!canSend}
             render={<Button size="sm" className="h-8 px-3" />}
           >
             Update

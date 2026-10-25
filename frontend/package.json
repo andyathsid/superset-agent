@@ -46,6 +46,7 @@
     "concurrently": "^10.0.5",
     "oxfmt": "^0.72.0",
     "oxlint": "^1.87.0",
+    "oxlint-tsgolint": "^7.0.2005",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2"
   }
