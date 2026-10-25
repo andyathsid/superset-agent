@@ -14,6 +14,7 @@ import {
   type SharedKeyProvider,
 } from "../config/models";
 import { AddModelDialog } from "./add-model-dialog";
+import { getModelConnection } from "../runtime/model-config";
 import { ModelActionsButton, ModelActionDialog, type ModelAction } from "./model-actions";
 import { useModels } from "./model-provider";
 import { useThreadModels } from "./model-thread-provider";
@@ -39,7 +40,7 @@ const providerLogos = {
   custom: BoxIcon,
 };
 
-function toModelOption(model: AssistantModel) {
+function toModelOption(model: AssistantModel, modelId: string) {
   const Logo = providerLogos[model.provider];
   const provider = modelProviders.find((provider) => provider.id === model.provider)!;
   return {
@@ -49,7 +50,7 @@ function toModelOption(model: AssistantModel) {
         className={`size-3.5 object-contain ${model.provider === "ollama" || model.provider === "openrouter" ? "dark:invert" : ""}`}
       />
     ),
-    keywords: [provider.name, model.provider],
+    keywords: [provider.name, model.provider, modelId],
   };
 }
 
@@ -62,6 +63,7 @@ const defaultOption = {
 export function AssistantModelSelector() {
   const {
     allModels,
+    connections,
     addModel,
     updateModel,
     removeModel,
@@ -73,6 +75,7 @@ export function AssistantModelSelector() {
   } = useModels(
     useShallow((state) => ({
       allModels: state.allModels,
+      connections: state.connections,
       addModel: state.addModel,
       updateModel: state.updateModel,
       removeModel: state.removeModel,
@@ -127,7 +130,7 @@ export function AssistantModelSelector() {
     managingModelRef.current = false;
   }
   const models = allModels.map((model) => ({
-    ...toModelOption(model),
+    ...toModelOption(model, getModelConnection(model, connections).modelId),
     disabled: model.provider !== "ollama" && !getApiKey(model)?.trim(),
   }));
   const selectorModels: ModelOption[] = [defaultOption, ...models];
@@ -308,10 +311,14 @@ export function AssistantModelSelector() {
           key={`${actionTarget.action}/${actionTarget.model.id}`}
           model={actionTarget.model}
           action={actionTarget.action}
+          models={allModels}
+          connections={connections}
+          providerApiKeys={providerApiKeys}
+          customApiKey={customApiKeys[actionTarget.model.id]}
           onClose={closeModelAction}
-          onSave={(changes) => {
+          onSave={(model, connection, apiKey) => {
             if (locked) return;
-            updateModel(actionTarget.model.id, changes);
+            updateModel(actionTarget.model.id, model, connection, apiKey);
             closeModelAction();
           }}
           onDelete={() => {
@@ -342,6 +349,7 @@ export function AssistantModelSelector() {
         open={addDialogOpen && !locked}
         onOpenChange={setAddDialogOpen}
         models={allModels}
+        connections={connections}
         providerApiKeys={providerApiKeys}
         onAdd={(model, connection, apiKey) => {
           if (locked) return;

@@ -19,7 +19,12 @@ export type ModelState = {
   client: Client;
   threadModels: ThreadModelStore;
   addModel: (model: AssistantModel, connection: ModelConnection, apiKey: string) => void;
-  updateModel: (id: string, changes: Pick<AssistantModel, "name" | "description">) => void;
+  updateModel: (
+    id: string,
+    changes: Pick<AssistantModel, "name" | "description" | "provider">,
+    connection: ModelConnection,
+    apiKey?: string,
+  ) => void;
   removeModel: (id: string) => void;
   setProviderApiKey: (provider: SharedKeyProvider, apiKey: string) => void;
   setCustomApiKey: (id: string, apiKey: string) => void;
@@ -51,12 +56,23 @@ export function createModelStore(apiUrl?: string) {
             ? { ...state.providerApiKeys, [model.provider]: apiKey }
             : state.providerApiKeys,
       })),
-    updateModel: (id, changes) =>
-      set((state) => ({
-        allModels: state.allModels.map((model) =>
-          model.id === id ? { ...model, ...changes } : model,
-        ),
-      })),
+    updateModel: (id, changes, connection, apiKey) =>
+      set((state) => {
+        if (!state.allModels.some((model) => model.id === id)) return state;
+        const customApiKeys = { ...state.customApiKeys };
+        if (changes.provider === "custom") {
+          if (apiKey !== undefined) customApiKeys[id] = apiKey;
+        } else {
+          delete customApiKeys[id];
+        }
+        return {
+          allModels: state.allModels.map((model) =>
+            model.id === id ? { ...model, ...changes } : model,
+          ),
+          connections: new Map(state.connections).set(id, connection),
+          customApiKeys,
+        };
+      }),
     removeModel: (id) =>
       set((state) => {
         const connections = new Map(state.connections);

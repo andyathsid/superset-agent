@@ -13,6 +13,18 @@ export type RunModel = ModelIdentity & {
   apiKey?: string;
 };
 
+export function getModelConnection(
+  model: AssistantModel,
+  connections: ReadonlyMap<string, ModelConnection>,
+): ModelConnection {
+  return (
+    connections.get(model.id) ?? {
+      modelId: model.id.slice(model.provider.length + 1),
+      baseUrl: providerConnections[model.provider].baseUrl,
+    }
+  );
+}
+
 export function resolveRunModel(
   id: string,
   models: readonly AssistantModel[],
@@ -22,10 +34,7 @@ export function resolveRunModel(
   if (id === defaultModel.id) return { id, name: defaultModel.name };
   const model = models.find((item) => item.id === id);
   if (!model) throw new Error("The selected model no longer exists. Select another model.");
-  const connection = connections.get(id) ?? {
-    modelId: id.slice(model.provider.length + 1),
-    baseUrl: providerConnections[model.provider].baseUrl,
-  };
+  const connection = getModelConnection(model, connections);
   const apiKey = getApiKey(model)?.trim() ?? "";
   if (providerConnections[model.provider].requiresApiKey && !apiKey)
     throw new Error(`Set an API key for ${model.name} before sending a message.`);

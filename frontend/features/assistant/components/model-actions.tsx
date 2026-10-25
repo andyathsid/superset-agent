@@ -1,10 +1,8 @@
 "use client";
 
-import { useId, useState, type SubmitEvent } from "react";
+import { useState } from "react";
 import { EllipsisIcon, PencilIcon, SettingsIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Dialog,
@@ -14,7 +12,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { AssistantModel } from "../config/models";
+import type { AssistantModel, ModelConnection, ProviderApiKeys } from "../config/models";
+import { ModelForm } from "./model-form";
 
 export type ModelAction = "edit" | "delete";
 
@@ -92,29 +91,25 @@ export function ModelActionsButton({
 export function ModelActionDialog({
   model,
   action,
+  models,
+  connections,
+  providerApiKeys,
+  customApiKey,
   onClose,
   onSave,
   onDelete,
 }: {
   model: AssistantModel;
   action: ModelAction;
+  models: readonly AssistantModel[];
+  connections: ReadonlyMap<string, ModelConnection>;
+  providerApiKeys: ProviderApiKeys;
+  customApiKey?: string;
   onClose: () => void;
-  onSave: (changes: Pick<AssistantModel, "name" | "description">) => void;
+  onSave: (model: AssistantModel, connection: ModelConnection, apiKey?: string) => void;
   onDelete: () => void;
 }) {
-  const id = useId();
-  const [name, setName] = useState(model.name);
-  const [description, setDescription] = useState(model.description);
-  const [error, setError] = useState("");
   const deleting = action === "delete";
-  function submit(event: SubmitEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!name.trim()) {
-      setError("Enter a model name. Spaces alone are not allowed.");
-      return;
-    }
-    onSave({ name: name.trim(), description: description.trim() });
-  }
   return (
     <Dialog
       open
@@ -123,7 +118,7 @@ export function ModelActionDialog({
       }}
     >
       <DialogContent
-        className="max-h-[calc(100dvh-2rem)] overflow-y-auto"
+        className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md"
         finalFocus={() =>
           document.querySelector<HTMLInputElement>('[aria-label="Search models"]') ??
           document.querySelector<HTMLElement>('[data-slot="model-selector-trigger"]')
@@ -134,7 +129,7 @@ export function ModelActionDialog({
           <DialogDescription>
             {deleting
               ? `Remove ${model.name} from this session? This cannot be undone in this session.`
-              : "Update the display name and description for this session. The Model ID stays the same."}
+              : "Update the model and connection for this session. Reloading clears changes."}
           </DialogDescription>
         </DialogHeader>
         {deleting ? (
@@ -147,44 +142,15 @@ export function ModelActionDialog({
             </Button>
           </DialogFooter>
         ) : (
-          <form onSubmit={submit} className="grid gap-4">
-            <div className="grid gap-1.5">
-              <label htmlFor={`${id}-name`} className="text-sm font-medium">
-                Name
-              </label>
-              <Input
-                id={`${id}-name`}
-                required
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                aria-invalid={!!error}
-                aria-describedby={error ? `${id}-error` : undefined}
-              />
-              {error && (
-                <p id={`${id}-error`} role="alert" className="text-xs text-destructive">
-                  {error}
-                </p>
-              )}
-            </div>
-            <div className="grid gap-1.5">
-              <label htmlFor={`${id}-description`} className="text-sm font-medium">
-                Description
-              </label>
-              <Textarea
-                id={`${id}-description`}
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-              />
-            </div>
-            <DialogFooter className="flex-row justify-end">
-              <Button type="button" variant="ghost" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button type="submit" className="bg-blue-600 text-white hover:bg-blue-500">
-                Save changes
-              </Button>
-            </DialogFooter>
-          </form>
+          <ModelForm
+            model={model}
+            initialApiKey={customApiKey}
+            models={models}
+            connections={connections}
+            providerApiKeys={providerApiKeys}
+            onSave={onSave}
+            onCancel={onClose}
+          />
         )}
       </DialogContent>
     </Dialog>
