@@ -33,7 +33,3 @@ export function resolveRunModel(
     throw new Error(`Configure a connection for ${model.name} before sending a message.`);
   return { id, name: model.name, provider: model.provider, ...connection, apiKey };
 }
-
-export function modelIdentity(model: ModelIdentity): ModelIdentity {
-  return { id: model.id, name: model.name };
-}

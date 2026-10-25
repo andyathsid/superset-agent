@@ -29,7 +29,7 @@ import {
 } from "@/features/assistant/components/assistant-ui/elements/run-activity";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MessageModelChangeMarkers, ThreadModelError } from "../../model-thread-provider";
+import { ThreadModelError } from "../../model-thread-provider";
 import { cn } from "@/lib/utils";
 import {
   ActionBarMorePrimitive,
@@ -203,6 +203,7 @@ const isNewChatView = (s: AssistantState) =>
 const isHistoryLoadingView = (s: AssistantState) =>
   s.thread.messages.length === 0 &&
   s.thread.isLoading &&
+  !s.thread.isDisabled &&
   !s.threads.isLoading;
 
 const ThreadHistorySkeleton: FC = () => (
@@ -289,7 +290,6 @@ const ThreadRoot: FC<{
               {() => (
                 <>
                   <ThreadMessage />
-                  <MessageModelChangeMarkers />
                 </>
               )}
             </ThreadPrimitive.Messages>

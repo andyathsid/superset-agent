@@ -38,62 +38,78 @@ export const providerConnections: Record<
 };
 
 // Initial choices. Credentials and user-added models stay in memory for this session.
+
+ // Initial choices. Credentials and user-added models stay in memory for this session.
 export const assistantModels: readonly AssistantModel[] = [
+  // OpenAI
   {
-    id: "openai/gpt-4.1",
-    name: "GPT-4.1",
+    id: "openai/gpt-6-luna",
+    name: "GPT-6 Luna",
     provider: "openai",
-    description: "General purpose and coding",
+    description: "Fast, efficient, low-cost general purpose model",
   },
   {
-    id: "openai/gpt-4.1-mini",
-    name: "GPT-4.1 mini",
+    id: "openai/gpt-5.4-mini",
+    name: "GPT-5.4 Mini",
     provider: "openai",
-    description: "Fast and lightweight",
+    description: "Affordable coding, reasoning, and everyday tasks",
   },
+
+  // OpenRouter - Free
   {
-    id: "openrouter/deepseek/deepseek-r1",
-    name: "DeepSeek R1",
+    id: "openrouter/openrouter/free",
+    name: "OpenRouter Auto (Free)",
     provider: "openrouter",
-    description: "Reasoning via OpenRouter",
+    description: "Automatically routes to available free models",
   },
   {
-    id: "openrouter/meta-llama/llama-3.3-70b-instruct",
-    name: "Llama 3.3 70B",
+    id: "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+    name: "Nemotron 3 Ultra (Free)",
     provider: "openrouter",
-    description: "Open model via OpenRouter",
+    description: "Free advanced reasoning, coding, and agent tasks",
   },
   {
-    id: "anthropic/claude-sonnet-4",
-    name: "Claude Sonnet 4",
+    id: "openrouter/nvidia/nemotron-3.5-super-vl:free",
+    name: "Nemotron 3.5 Super VL (Free)",
+    provider: "openrouter",
+    description: "Free multimodal reasoning, vision, and coding",
+  },
+  {
+    id: "openrouter/cohere/north-mini-code:free",
+    name: "North Mini Code (Free)",
+    provider: "openrouter",
+    description: "Free lightweight coding and tool calling",
+  },
+
+  // Anthropic
+  {
+    id: "anthropic/claude-haiku-5-5",
+    name: "Claude Haiku 5.5",
     provider: "anthropic",
-    description: "Writing and coding",
+    description: "Fast, affordable chat and lightweight tasks",
   },
   {
-    id: "anthropic/claude-opus-4",
-    name: "Claude Opus 4",
+    id: "anthropic/claude-sonnet-5-5",
+    name: "Claude Sonnet 5.5",
     provider: "anthropic",
-    description: "Complex tasks and reasoning",
+    description: "Balanced reasoning, writing, and coding",
   },
+
+  // Ollama - Local
   {
-    id: "ollama/llama3.2",
-    name: "Llama 3.2",
+    id: "ollama/gemma4:12b",
+    name: "Gemma 4 12B",
     provider: "ollama",
-    description: "Local model via Ollama",
+    description: "Local reasoning, coding, and multimodal tasks",
   },
   {
-    id: "ollama/qwen2.5",
-    name: "Qwen 2.5",
+    id: "ollama/gemma4:e4b",
+    name: "Gemma 4 E4B",
     provider: "ollama",
-    description: "Local multilingual model",
-  },
-  {
-    id: "custom/demo",
-    name: "Custom Demo",
-    provider: "custom",
-    description: "Demo custom model",
+    description: "Efficient local model for lightweight tasks",
   },
 ];
+
 
 export const defaultModelId = "default";
 

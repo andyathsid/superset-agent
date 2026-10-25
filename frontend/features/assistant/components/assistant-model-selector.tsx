@@ -27,6 +27,7 @@ import {
   ModelSelectorSearch,
   ModelSelectorSeparator,
   ModelSelectorTrigger,
+  type ModelOption,
 } from "./assistant-ui/elements/model-selector";
 
 const providerLogos = {
@@ -61,7 +62,6 @@ export function AssistantModelSelector() {
   const {
     allModels,
     setAllModels,
-    selectedModel,
     connectionsRef,
     providerApiKeys,
     setProviderApiKeys,
@@ -69,7 +69,7 @@ export function AssistantModelSelector() {
     setCustomApiKeys,
     getApiKey,
   } = useModels();
-  const { locked, selectModel } = useThreadModels();
+  const { selectedModel, locked, selectModel } = useThreadModels();
   const [actionTarget, setActionTarget] = useState<{
     model: AssistantModel;
     action: ModelAction;
@@ -116,7 +116,14 @@ export function AssistantModelSelector() {
     ...toModelOption(model),
     disabled: model.provider !== "ollama" && !getApiKey(model)?.trim(),
   }));
-  const selectorModels = [defaultOption, ...models];
+  const selectorModels: ModelOption[] = [defaultOption, ...models];
+  if (!selectorModels.some((model) => model.id === selectedModel)) {
+    selectorModels.push({
+      id: selectedModel,
+      name: `${selectedModel} (unavailable)`,
+      disabled: true,
+    });
+  }
   const [provider, setProvider] = useState<ModelProviderId | "all">("all");
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -307,7 +314,6 @@ export function AssistantModelSelector() {
               delete next[id];
               return next;
             });
-            if (selectedModel === id) selectModel(defaultOption.id);
             closeModelAction();
           }}
         />
@@ -343,7 +349,7 @@ export function AssistantModelSelector() {
             setProviderApiKeys((current) => ({ ...current, [model.provider]: apiKey }));
           connectionsRef.current.set(model.id, connection);
           setAllModels((current) => [...current, model]);
-          selectModel(model.id, model);
+          selectModel(model.id);
           setAddDialogOpen(false);
         }}
       />

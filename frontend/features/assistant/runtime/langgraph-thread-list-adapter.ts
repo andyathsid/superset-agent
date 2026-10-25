@@ -1,9 +1,11 @@
 import type { RemoteThreadListAdapter } from "@assistant-ui/react";
 import type { Client } from "@langchain/langgraph-sdk";
 import { createAssistantStream } from "assistant-stream";
+import type { ThreadModelStore } from "./thread-model-store";
 
 export const createLangGraphThreadListAdapter = (
   client: Client,
+  threadModels: ThreadModelStore,
 ): RemoteThreadListAdapter => ({
   async list() {
     const threads = await client.threads.search({
@@ -26,12 +28,8 @@ export const createLangGraphThreadListAdapter = (
     };
   },
 
-  async initialize() {
-    const thread = await client.threads.create();
-    return {
-      remoteId: thread.thread_id,
-      externalId: thread.thread_id,
-    };
+  async initialize(localId) {
+    return threadModels.initialize(localId);
   },
 
   async fetch(threadId) {

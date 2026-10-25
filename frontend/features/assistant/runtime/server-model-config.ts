@@ -18,7 +18,7 @@ export function resolveModelContext(selection: unknown): Record<string, string> 
     if (!apiKey) return {}; // Agent environment supplies the default when Next has no model configuration.
     return {
       model_provider: process.env.MODEL_PROVIDER?.trim() || "openrouter",
-      model_name: process.env.MODEL_NAME?.trim() || "minimax/minimax-m3.1-flash:free",
+      model_name: process.env.MODEL_NAME?.trim() || "nvidia/nemotron-3-ultra-550b-a55b:free",
       model_base_url: process.env.MODEL_BASE_URL?.trim() || "https://openrouter.ai/api/v1",
       model_api_key: apiKey,
     };

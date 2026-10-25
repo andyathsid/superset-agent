@@ -1,18 +1,22 @@
 "use client";
 
-import { createContext, useContext, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { Client } from "@langchain/langgraph-sdk";
 import {
   assistantModels,
-  defaultModelId,
   type AssistantModel,
   type ModelConnection,
   type ProviderApiKeys,
 } from "../config/models";
 import { resolveRunModel, type RunModel } from "../runtime/model-config";
+import { ThreadModelStore } from "../runtime/thread-model-store";
 
 function useModelStore() {
   const [allModels, setAllModels] = useState<AssistantModel[]>(() => [...assistantModels]);
-  const [selectedModel, setSelectedModel] = useState(defaultModelId);
+  const apiUrl =
+    typeof window !== "undefined" ? new URL("/api", window.location.href).href : undefined;
+  const client = useMemo(() => new Client({ apiUrl }), [apiUrl]);
+  const threadModels = useMemo(() => new ThreadModelStore(client), [client]);
   // Credentials stay in memory, separate from the model metadata rendered by cmdk.
   const connectionsRef = useRef(new Map<string, ModelConnection>());
   const [providerApiKeys, setProviderApiKeys] = useState<ProviderApiKeys>({});
@@ -24,20 +28,16 @@ function useModelStore() {
         ? undefined
         : providerApiKeys[model.provider];
   }
-  const snapshotRef = useRef<() => ReturnType<typeof resolveRunModel>>(() => {
+  const snapshotRef = useRef<(id: string) => RunModel>(() => {
     throw new Error("Model store is not ready.");
   });
-  const prepareRunRef = useRef<
-    | ((threadId: string, request: Record<string, unknown>, model: RunModel) => Promise<void>)
-    | undefined
-  >(undefined);
-  snapshotRef.current = () =>
-    resolveRunModel(selectedModel, allModels, connectionsRef.current, getApiKey);
+  snapshotRef.current = (id) => resolveRunModel(id, allModels, connectionsRef.current, getApiKey);
   return {
     allModels,
     setAllModels,
-    selectedModel,
-    setSelectedModel,
+    apiUrl,
+    client,
+    threadModels,
     connectionsRef,
     providerApiKeys,
     setProviderApiKeys,
@@ -45,7 +45,6 @@ function useModelStore() {
     setCustomApiKeys,
     getApiKey,
     snapshotRef,
-    prepareRunRef,
   };
 }
 
