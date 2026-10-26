@@ -183,7 +183,9 @@ export const AppShell: FC<AppShellProps> = ({
       <aside
         className={cn(
           "bg-sidebar relative hidden h-full shrink-0 flex-col overflow-hidden border-r md:flex",
-          isResizing ? "select-none" : "transition-[width] duration-200",
+          isResizing
+            ? "select-none"
+            : "transition-[width] duration-200 motion-reduce:transition-none",
           railClassName,
         )}
         style={{
@@ -203,18 +205,27 @@ export const AppShell: FC<AppShellProps> = ({
               <PanelLeftIcon className="size-4" />
             </TooltipIconButton>
           )}
-          {headerContent !== undefined
-            ? headerContent
-            : !sidebarCollapsed && (
-                <span className="ml-2 truncate text-sm font-medium">{title}</span>
-              )}
+          <div
+            inert={sidebarCollapsed}
+            className={cn(
+              "min-w-0 transition-opacity duration-200 ease-out motion-reduce:transition-none",
+              sidebarCollapsed ? "opacity-0" : "opacity-100",
+            )}
+          >
+            {headerContent !== undefined ? (
+              headerContent
+            ) : (
+              <span className="ml-2 block truncate text-sm font-medium">{title}</span>
+            )}
+          </div>
         </div>
 
         <div
           className={cn(
-            "relative flex flex-1 flex-col gap-0.5 transition-[padding,width] duration-200",
-            sidebarCollapsed ? "w-12 overflow-hidden px-2 pt-1" : "w-full overflow-y-auto p-3",
+            "relative flex min-h-0 flex-1 flex-col gap-0.5 p-3",
+            sidebarCollapsed ? "overflow-hidden" : "overflow-y-auto",
           )}
+          style={{ width: sidebarWidth }}
         >
           {sidebar({ collapsed: sidebarCollapsed, closeMobileSidebar })}
         </div>

@@ -24,6 +24,8 @@ export function useMcpServerStatus({
   intervalMs = DEFAULT_INTERVAL_MS,
 }: UseMcpServerStatusOptions) {
   const [servers, setServers] = useState<readonly McpServer[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async (signal: AbortSignal) => {
     try {
@@ -37,18 +39,23 @@ export function useMcpServerStatus({
       }
 
       const body: McpStatusResponse = await response.json();
+      if (signal.aborted) return;
       setServers(
         body.servers.map(({ checked_at, ...server }) => ({
           ...server,
           checkedAt: checked_at,
         })),
       );
+      setError(null);
+      setIsLoading(false);
     } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
+      if (signal.aborted || (error instanceof Error && error.name === "AbortError")) {
         return;
       }
 
       // Keep the last successful result when a refresh fails.
+      setError("Could not refresh MCP status.");
+      setIsLoading(false);
     }
   }, []);
 
@@ -71,5 +78,5 @@ export function useMcpServerStatus({
     };
   }, [intervalMs, pollEnabled, refresh]);
 
-  return { servers };
+  return { servers, isLoading, error };
 }

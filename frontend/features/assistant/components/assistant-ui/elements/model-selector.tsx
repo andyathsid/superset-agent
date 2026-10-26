@@ -148,7 +148,11 @@ function ModelSelectorTrigger({
       data-size={size ?? "default"}
       role="combobox"
       aria-haspopup="listbox"
-      className={cn(modelSelectorTriggerVariants({ variant, size }), className)}
+      className={cn(
+        "group/model-selector",
+        modelSelectorTriggerVariants({ variant, size }),
+        className,
+      )}
       onKeyDown={(e) => {
         onKeyDown?.(e);
         if (e.defaultPrevented) return;
@@ -162,7 +166,10 @@ function ModelSelectorTrigger({
       {...props}
     >
       {children ?? <ModelSelectorValue />}
-      <ChevronDownIcon className="size-4 opacity-50" />
+      <ChevronDownIcon
+        aria-hidden
+        className="size-4 opacity-50 transition-transform duration-150 group-aria-expanded/model-selector:rotate-180 motion-reduce:transition-none self-center"
+      />
     </PopoverTrigger>
   );
 }
