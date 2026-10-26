@@ -17,8 +17,8 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Superst MCP Chatbot",
-  description: "Chat with Superst MCP Chatbot.",
+  title: "CDM Chatbot",
+  description: "Chat with OpenMetada and Superset MCP.",
 };
 
 export default function RootLayout({

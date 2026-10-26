@@ -1,14 +1,12 @@
+import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 from agent.config import AgentSettings
-from agent.tools import (
-    CatalogError,
-    close_shared_mcp_resources,
-    probe_mcp_server,
-    tool_catalog_cache,
-)
+from agent.mcp.catalog import CatalogError, tool_catalog_cache
+from agent.mcp.client import probe_mcp_server
+from agent.mcp.transport import close_shared_mcp_resources
 from core.rate_limit import limiter
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
@@ -53,14 +51,8 @@ async def get_mcp_server_status() -> McpServerStatusResponse:
     """Return the latest safe-to-display status for configured MCP servers."""
     settings = AgentSettings.from_env()
 
-    probe = await probe_mcp_server(
-        settings.superset_mcp_url,
-        (
-            settings.superset_mcp_api_key.get_secret_value()
-            if settings.superset_mcp_api_key
-            else None
-        ),
-    )
+    servers = settings.mcp_servers()
+    probes = await asyncio.gather(*(probe_mcp_server(server) for server in servers))
 
     checked_at = datetime.now(UTC)
 
@@ -68,34 +60,37 @@ async def get_mcp_server_status() -> McpServerStatusResponse:
         checked_at=checked_at,
         servers=[
             McpServerStatus(
-                id="superset",
-                name="Superset",
+                id=server.id,
+                name=server.name,
                 transport="HTTP",
-                url=settings.superset_mcp_url,
+                url=server.url,
                 status=probe["status"],
                 tools=probe["tools"],
                 checked_at=checked_at,
             )
+            for server, probe in zip(servers, probes, strict=True)
         ],
     )
 
 
 @app.get(
-    "/mcp-servers/superset/tools",
+    "/mcp-servers/{server_id}/tools",
     response_model=McpToolCatalogResponse,
 )
-async def get_superset_tool_catalog() -> McpToolCatalogResponse:
+async def get_tool_catalog(server_id: str) -> McpToolCatalogResponse:
     settings = AgentSettings.from_env()
-    api_key = (
-        settings.superset_mcp_api_key.get_secret_value()
-        if settings.superset_mcp_api_key
-        else None
+    server = next(
+        (server for server in settings.mcp_servers() if server.id == server_id), None
     )
+    if server is None:
+        raise HTTPException(status_code=404, detail="MCP server is not configured.")
+    api_key = server.token.get_secret_value() if server.token else None
 
     try:
         return await tool_catalog_cache.get(
-            settings.superset_mcp_url,
+            server.url,
             api_key,
+            server_id=server.id,
         )
     except CatalogError as error:
         raise HTTPException(

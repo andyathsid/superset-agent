@@ -4,6 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 McpConnectionStatus = Literal["connected", "needs-auth", "failed"]
+McpServerId = Literal["superset", "openmetadata"]
 
 
 class McpServerStatus(BaseModel):
@@ -20,10 +21,12 @@ class McpServerStatusResponse(BaseModel):
     checked_at: datetime
     servers: list[McpServerStatus]
 
+
 class McpToolCatalogItem(BaseModel):
     model_config = ConfigDict(strict=True)
 
     name: str = Field(min_length=1, pattern=r"\S")
+    raw_name: str = Field(min_length=1, pattern=r"\S")
     description: str
     category: str
     source: Literal["base", "discovered"]
@@ -31,6 +34,6 @@ class McpToolCatalogItem(BaseModel):
 
 
 class McpToolCatalogResponse(BaseModel):
-    server_id: Literal["superset"] = "superset"
+    server_id: McpServerId = "superset"
     fetched_at: datetime
     tools: list[McpToolCatalogItem]

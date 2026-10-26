@@ -81,7 +81,7 @@ import {
   type PropsWithChildren,
   type ReactNode,
 } from "react";
-import { SupersetLogo } from "@/features/workspace/components/logos";
+import { OpenMetadataLogo, SupersetLogo } from "@/features/workspace/components/logos";
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 
@@ -518,15 +518,24 @@ const ThreadScrollToBottom: FC = () => {
 const ThreadWelcome: FC = () => {
   return (
     <div className="aui-thread-welcome-root fade-in slide-in-from-bottom-1 animate-in fill-mode-both mb-6 flex flex-col items-center gap-3 px-2 text-center duration-200">
-      <div className="flex items-center justify-center gap-3">
-        <SupersetLogo className="h-6 w-auto shrink-0 text-[#484848] dark:text-zinc-200" />
-        <h1 className="text-2xl font-medium tracking-tight">
-          Superset MCP Chatbot
-        </h1>
+      <div className="flex items-center justify-center gap-4">
+        <OpenMetadataLogo
+          aria-hidden={false}
+          role="img"
+          aria-label="OpenMetadata"
+          className="h-8 w-auto shrink-0"
+        />
+        <SupersetLogo
+          aria-hidden={false}
+          role="img"
+          aria-label="Apache Superset"
+          className="text-foreground h-8 w-auto shrink-0"
+        />
       </div>
+      <h1 className="text-2xl font-medium tracking-tight">Core Data Management Chatbot</h1>
 
       <p className="aui-thread-welcome-message-inner text-muted-foreground text-sm">
-        What would you like to explore in Superset?
+        What would you like to explore in OpenMetadata or Superset?
       </p>
     </div>
   );

@@ -30,11 +30,19 @@ type McpStatusSectionProps = {
   collapsed: boolean;
 };
 
+const mcpServerOrder: Record<string, number> = {
+  openmetadata: 0,
+  superset: 1,
+};
+
 export function McpStatusSection({ collapsed }: McpStatusSectionProps) {
   const [mcpStatusOpen, setMcpStatusOpen] = useState(true);
   const { servers, isLoading, error } = useMcpServerStatus({
     pollEnabled: !collapsed && mcpStatusOpen,
   });
+  const orderedServers = [...servers].sort(
+    (a, b) => (mcpServerOrder[a.id] ?? 2) - (mcpServerOrder[b.id] ?? 2),
+  );
 
   return (
     <CollapsibleRoot
@@ -67,18 +75,14 @@ export function McpStatusSection({ collapsed }: McpStatusSectionProps) {
             <span className="sr-only">Checking MCP connections…</span>
             <div
               aria-hidden="true"
-              className="border-sidebar-border flex min-w-0 flex-col gap-3 rounded-xl border p-3 motion-reduce:[&_[data-slot=skeleton]]:animate-none"
+              className="flex min-w-0 items-center gap-2.5 px-2.5 py-2 motion-reduce:[&_[data-slot=skeleton]]:animate-none"
             >
-              <div className="flex min-w-0 items-center gap-2.5">
-                <Skeleton className="size-8 shrink-0 rounded-lg" />
-                <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <Skeleton className="h-4 w-24 max-w-full" />
-                  <Skeleton className="h-3 w-full" />
-                </div>
-                <Skeleton className="size-1.5 shrink-0 rounded-full" />
+              <Skeleton className="size-4 shrink-0 rounded" />
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <Skeleton className="h-3 w-24 max-w-full" />
+                <Skeleton className="h-2.5 w-full" />
               </div>
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-3 w-3/4" />
+              <Skeleton className="size-3 shrink-0 rounded" />
             </div>
           </div>
         )}
@@ -90,45 +94,61 @@ export function McpStatusSection({ collapsed }: McpStatusSectionProps) {
         {!isLoading && !error && servers.length === 0 && (
           <p className="text-muted-foreground px-3 py-2 text-xs">No MCP servers configured.</p>
         )}
-        <ul className="flex min-w-0 flex-col gap-2 px-0.5 pt-2">
-          {servers.map(({ id, name, url, tools, transport, status, checkedAt }) => {
+        <ul className="flex min-w-0 flex-col gap-0.5 pt-1">
+          {orderedServers.map(({ id, name, url, tools, transport, status, checkedAt }) => {
             const Icon =
               id === "superset" ? ChartColumnIcon : id === "openmetadata" ? DatabaseIcon : PlugIcon;
             return (
-              <li
-                key={id}
-                className="border-sidebar-border flex min-w-0 flex-col gap-3 rounded-xl border p-3"
-              >
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <span className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-lg">
-                    <Icon aria-hidden className="size-4" />
+              <CollapsibleRoot key={id} render={<li />} className="min-w-0 rounded-lg">
+                <CollapsibleTrigger className="group/mcp-server hover:bg-muted/50 grid w-full min-w-0 grid-cols-[1rem_minmax(0,1fr)_0.75rem] items-center gap-x-2.5 gap-y-0.5 rounded-lg px-2.5 py-2 text-left outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none [&_svg]:shrink-0">
+                  <span className="text-muted-foreground flex size-4 shrink-0 items-center justify-center [&_svg]:size-4">
+                    <Icon aria-hidden />
                   </span>
-                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="truncate text-sm font-medium">{name}</span>
-                    <span className="text-muted-foreground text-[10px]">
-                      {mcpStatusLabels[status]} · {transport} · {tools.length} tools
-                    </span>
-                  </div>
+                  <span className="truncate text-xs leading-4 font-medium">{name}</span>
+                  <ChevronDownIcon
+                    aria-hidden
+                    className="text-muted-foreground/60 size-3 transition-transform group-aria-expanded/mcp-server:rotate-180 motion-reduce:transition-none"
+                  />
                   <span
                     aria-hidden
-                    className={cn("size-1.5 shrink-0 rounded-full", mcpStatusDots[status])}
+                    className={cn(
+                      "size-1.5 justify-self-center rounded-full",
+                      mcpStatusDots[status],
+                    )}
                   />
-                </div>
-                <div className="bg-muted/50 flex min-w-0 flex-col gap-1 rounded-md px-2 py-1.5">
-                  <span className="text-muted-foreground text-[10px] font-medium">MCP URL</span>
-                  {url ? (
-                    <code className="select-text text-[11px] leading-relaxed break-all">{url}</code>
-                  ) : (
-                    <span className="text-muted-foreground text-[11px]">URL belum diatur</span>
-                  )}
-                </div>
-
-                {checkedAt && (
-                  <time dateTime={checkedAt} className="text-muted-foreground text-[10px]">
-                    Last checked {new Date(checkedAt).toLocaleString()}
-                  </time>
-                )}
-              </li>
+                  <span className="text-muted-foreground col-span-2 flex flex-wrap items-center gap-x-1.5 text-[10px] leading-3.5">
+                    <span>{mcpStatusLabels[status]}</span>
+                    <span aria-hidden>·</span>
+                    <span>{transport}</span>
+                    <span aria-hidden>·</span>
+                    <span className="whitespace-nowrap">{tools.length} tools</span>
+                  </span>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="h-(--collapsible-panel-height) overflow-hidden opacity-100 transition-[height,opacity] duration-200 ease-out data-[starting-style]:h-0 data-[starting-style]:opacity-0 data-[ending-style]:h-0 data-[ending-style]:opacity-0 motion-reduce:transition-none">
+                  <dl className="bg-muted/50 mx-2.5 mt-1 mb-2 flex min-w-0 flex-col gap-3 rounded-lg p-2.5">
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <dt className="text-muted-foreground text-[10px] font-medium">MCP URL</dt>
+                      <dd className="min-w-0 text-[11px] leading-relaxed">
+                        {url ? (
+                          <code className="select-text break-all">{url}</code>
+                        ) : (
+                          <span className="text-muted-foreground">URL belum diatur</span>
+                        )}
+                      </dd>
+                    </div>
+                    {checkedAt && (
+                      <div className="flex min-w-0 flex-col gap-1">
+                        <dt className="text-muted-foreground text-[10px] font-medium">
+                          Last checked
+                        </dt>
+                        <dd className="text-[11px] leading-relaxed">
+                          <time dateTime={checkedAt}>{new Date(checkedAt).toLocaleString()}</time>
+                        </dd>
+                      </div>
+                    )}
+                  </dl>
+                </CollapsibleContent>
+              </CollapsibleRoot>
             );
           })}
         </ul>

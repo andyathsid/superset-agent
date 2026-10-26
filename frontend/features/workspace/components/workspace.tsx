@@ -23,7 +23,7 @@ export function Workspace({ children, defaultSidebarCollapsed }: WorkspaceProps)
 
   return (
     <AppShell
-      title="Superset MCP Chatbot"
+      title="Core Data Management"
       defaultCollapsed={defaultSidebarCollapsed}
       onCollapsedChange={(collapsed) => writeClientCookie(sidebarCollapsedCookie, collapsed)}
       sidebar={({ collapsed, closeMobileSidebar }) => {

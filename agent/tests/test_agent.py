@@ -5,14 +5,17 @@ from __future__ import annotations
 import json
 import os
 import sys
+from collections.abc import AsyncGenerator, Sequence
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
 from agent import agent as agent_module
-from agent.config import AgentContext
+from agent.config import AgentContext, AgentSettings, McpServerConfig
 from langchain.messages import AIMessage, ToolMessage
 from langgraph_sdk.runtime import ServerRuntime
+from pydantic import SecretStr
 
 _MAX_TOOL_CONTENT_CHARS = 800
 _e2e = pytest.mark.skipif(
@@ -67,6 +70,57 @@ async def _run_agent(agent: Any, agent_input: dict[str, Any]) -> dict[str, Any]:
 
     assert final_state is not None
     return final_state
+
+
+@pytest.mark.asyncio
+async def test_graph_passes_configured_servers_and_keeps_tools_open(
+    monkeypatch,
+) -> None:
+    settings = AgentSettings(
+        model_name="test",
+        model_base_url="https://model.example/v1",
+        model_api_key=SecretStr("model-secret"),
+        superset_mcp_url="https://superset.example/mcp",
+        superset_mcp_api_key=None,
+        superset_default_dataset="test",
+        openmetadata_mcp_url="https://metadata.example/mcp",
+        openmetadata_token=SecretStr("metadata-secret"),
+    )
+    events: list[str] = []
+    tools = [object()]
+
+    @asynccontextmanager
+    async def fake_create_tools(
+        servers: Sequence[McpServerConfig],
+    ) -> AsyncGenerator[list[object], None]:
+        assert tuple(servers) == settings.mcp_servers()
+        events.append("opened")
+        try:
+            yield tools
+        finally:
+            events.append("closed")
+
+    def fake_build_agent(
+        received_settings: AgentSettings, received_tools: list[object]
+    ) -> str:
+        assert received_settings is settings
+        assert received_tools is tools
+        assert events == ["opened"]
+        return "compiled-agent"
+
+    monkeypatch.setattr(
+        AgentSettings, "from_env", classmethod(lambda cls, context: settings)
+    )
+    monkeypatch.setattr(agent_module, "create_tools", fake_create_tools)
+    monkeypatch.setattr(agent_module, "build_agent", fake_build_agent)
+    runtime = cast(
+        ServerRuntime[AgentContext],
+        SimpleNamespace(execution_runtime=SimpleNamespace(context=AgentContext())),
+    )
+    async with agent_module.graph(runtime) as compiled:
+        assert compiled == "compiled-agent"
+        assert events == ["opened"]
+    assert events == ["opened", "closed"]
 
 
 @_e2e

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from agent.config import AgentContext, AgentSettings
 
 SETTINGS_ENV_VARS = (
@@ -14,6 +13,8 @@ SETTINGS_ENV_VARS = (
     "SUPERSET_MCP_URL",
     "SUPERSET_MCP_API_KEY",
     "SUPERSET_DEFAULT_DATASET",
+    "OPENMETADATA_MCP_URL",
+    "OPENMETADATA_TOKEN",
 )
 
 
@@ -136,6 +137,48 @@ def test_uses_superset_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.superset_mcp_url == "http://localhost:5008/mcp"
     assert settings.superset_default_dataset == "wb_health_population"
     assert settings.superset_mcp_api_key is None
+    assert [server.id for server in settings.mcp_servers()] == ["superset"]
+
+
+def test_loads_openmetadata_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_required_model_environment(monkeypatch)
+    monkeypatch.setenv("OPENMETADATA_MCP_URL", " https://metadata.example/mcp ")
+    monkeypatch.setenv("OPENMETADATA_TOKEN", " metadata-secret ")
+    settings = AgentSettings.from_env()
+    servers = settings.mcp_servers()
+    assert [server.id for server in servers] == ["superset", "openmetadata"]
+    assert servers[1].url == "https://metadata.example/mcp"
+    assert servers[1].token is not None
+    assert servers[1].token.get_secret_value() == "metadata-secret"
+    assert "metadata-secret" not in repr(settings)
+    assert "metadata-secret" not in repr(servers)
+
+
+@pytest.mark.parametrize("missing", ["OPENMETADATA_MCP_URL", "OPENMETADATA_TOKEN"])
+def test_requires_openmetadata_url_and_token_together(
+    monkeypatch: pytest.MonkeyPatch, missing: str
+) -> None:
+    set_required_model_environment(monkeypatch)
+    monkeypatch.setenv("OPENMETADATA_MCP_URL", "https://metadata.example/mcp")
+    monkeypatch.setenv("OPENMETADATA_TOKEN", "secret")
+    monkeypatch.delenv(missing)
+    with pytest.raises(RuntimeError, match="together"):
+        AgentSettings.from_env()
+
+
+@pytest.mark.parametrize(
+    "url", ["metadata.example/mcp", "ftp://metadata.example/mcp", "https:///mcp"]
+)
+def test_rejects_invalid_openmetadata_url(
+    monkeypatch: pytest.MonkeyPatch, url: str
+) -> None:
+    set_required_model_environment(monkeypatch)
+    monkeypatch.setenv("OPENMETADATA_MCP_URL", url)
+    monkeypatch.setenv("OPENMETADATA_TOKEN", "secret")
+    with pytest.raises(
+        RuntimeError, match=r"OPENMETADATA_MCP_URL must be a valid HTTP\(S\) URL"
+    ):
+        AgentSettings.from_env()
 
 
 def test_runtime_provider_overrides_environment(

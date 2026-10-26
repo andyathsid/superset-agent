@@ -9,11 +9,7 @@ type CatalogState =
   | { status: "error"; message: string };
 
 function getErrorMessage(body: unknown): string | null {
-  if (
-    typeof body !== "object" ||
-    body === null ||
-    !("detail" in body)
-  ) {
+  if (typeof body !== "object" || body === null || !("detail" in body)) {
     return null;
   }
 
@@ -31,7 +27,7 @@ function getErrorMessage(body: unknown): string | null {
   return null;
 }
 
-export function useToolCatalog() {
+export function useToolCatalog(serverId: string) {
   const [state, setState] = useState<CatalogState>({
     status: "loading",
   });
@@ -42,20 +38,16 @@ export function useToolCatalog() {
 
     async function loadCatalog() {
       try {
-        const response = await fetch(
-          "/api/mcp-servers/superset/tools",
-          {
-            cache: "no-store",
-            signal: controller.signal,
-          },
-        );
+        const response = await fetch(`/api/mcp-servers/${encodeURIComponent(serverId)}/tools`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
 
         if (!response.ok) {
           const body: unknown = await response.json().catch(() => null);
 
           throw new Error(
-            getErrorMessage(body) ??
-              "Could not load the tools catalog. Please try again.",
+            getErrorMessage(body) ?? "Could not load the tools catalog. Please try again.",
           );
         }
 
@@ -69,10 +61,7 @@ export function useToolCatalog() {
 
         setState({
           status: "error",
-          message:
-            error instanceof Error
-              ? error.message
-              : "Could not load the tools catalog.",
+          message: error instanceof Error ? error.message : "Could not load the tools catalog.",
         });
       }
     }
@@ -80,7 +69,7 @@ export function useToolCatalog() {
     void loadCatalog();
 
     return () => controller.abort();
-  }, [attempt]);
+  }, [serverId, attempt]);
 
   function retry() {
     setState({ status: "loading" });

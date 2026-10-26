@@ -10,6 +10,14 @@ from urllib.parse import urlsplit
 from pydantic import BaseModel, ConfigDict, SecretStr
 
 
+@dataclass(frozen=True, slots=True)
+class McpServerConfig:
+    id: Literal["superset", "openmetadata"]
+    name: str
+    url: str
+    token: SecretStr | None = None
+
+
 class AgentContext(BaseModel):
     """Model configuration supplied for one graph execution."""
 
@@ -36,6 +44,26 @@ class AgentSettings:
     model_provider: str = "openrouter"
     model_selection_id: str = "default"
     model_display_name: str = "Default Model"
+    openmetadata_mcp_url: str | None = None
+    openmetadata_token: SecretStr | None = None
+
+    def mcp_servers(self) -> tuple[McpServerConfig, ...]:
+        """Return the configured servers without unwrapping their credentials."""
+        servers = [
+            McpServerConfig(
+                "superset", "Superset", self.superset_mcp_url, self.superset_mcp_api_key
+            )
+        ]
+        if self.openmetadata_mcp_url:
+            servers.append(
+                McpServerConfig(
+                    "openmetadata",
+                    "OpenMetadata",
+                    self.openmetadata_mcp_url,
+                    self.openmetadata_token,
+                )
+            )
+        return tuple(servers)
 
     @classmethod
     def from_env(cls, context: AgentContext | None = None) -> AgentSettings:
@@ -91,6 +119,19 @@ class AgentSettings:
             model_api_key = "not-required"
 
         mcp_api_key = os.getenv("SUPERSET_MCP_API_KEY", "").strip()
+        openmetadata_url = os.getenv("OPENMETADATA_MCP_URL", "").strip()
+        openmetadata_token = os.getenv("OPENMETADATA_TOKEN", "").strip()
+        if bool(openmetadata_url) != bool(openmetadata_token):
+            raise RuntimeError(
+                "Set OPENMETADATA_MCP_URL and OPENMETADATA_TOKEN together."
+            )
+        if openmetadata_url:
+            parsed_openmetadata_url = urlsplit(openmetadata_url)
+            if (
+                parsed_openmetadata_url.scheme not in {"http", "https"}
+                or not parsed_openmetadata_url.netloc
+            ):
+                raise RuntimeError("OPENMETADATA_MCP_URL must be a valid HTTP(S) URL.")
 
         return cls(
             model_name=model_name,
@@ -110,4 +151,8 @@ class AgentSettings:
                 "wb_health_population",
             ).strip(),
             superset_mcp_api_key=(SecretStr(mcp_api_key) if mcp_api_key else None),
+            openmetadata_mcp_url=openmetadata_url or None,
+            openmetadata_token=(
+                SecretStr(openmetadata_token) if openmetadata_token else None
+            ),
         )

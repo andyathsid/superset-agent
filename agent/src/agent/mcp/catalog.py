@@ -3,149 +3,20 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-from collections.abc import AsyncGenerator, Callable
-from contextlib import asynccontextmanager
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import monotonic
-from typing import Any, Literal, TypedDict, cast
+from typing import Any, Literal, cast
 
 import httpx2
 from fastmcp import Client as FastMCPClient
-from fastmcp.client.caching import KeyValueResponseCacheStore
 from fastmcp.client.transports import StreamableHttpTransport
-from langchain.mcp import MCPAdapter
-from langchain_core.tools import BaseTool
-from mcp.client.caching import CacheConfig
 from mcp.shared.exceptions import MCPError
 from mcp.types import REQUEST_TIMEOUT, CallToolResult, TextContent
-from schemas.mcp import McpToolCatalogItem, McpToolCatalogResponse
+from schemas.mcp import McpServerId, McpToolCatalogItem, McpToolCatalogResponse
 
-_HTTP_POOL = httpx2.AsyncHTTPTransport(
-    http2=True,
-    limits=httpx2.Limits(
-        max_connections=100,
-        max_keepalive_connections=20,
-        keepalive_expiry=30,
-    ),
-)
-
-
-class _SharedPool(httpx2.AsyncBaseTransport):
-    """Let run-scoped clients borrow the process-wide connection pool."""
-
-    async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
-        """Delegate requests without transferring ownership of the pool."""
-        return await _HTTP_POOL.handle_async_request(request)
-
-    async def aclose(self) -> None:
-        """Leave closing the shared pool to the Aegra application lifespan."""
-
-
-def _http_client_factory(
-    headers: dict[str, str] | None = None,
-    timeout: httpx2.Timeout | None = None,
-    auth: httpx2.Auth | None = None,
-    follow_redirects: bool = False,
-) -> httpx2.AsyncClient:
-    """Create a run-scoped client that borrows the worker-wide pool."""
-    if timeout is None:
-        timeout = httpx2.Timeout(30.0, read=300.0)
-
-    return httpx2.AsyncClient(
-        auth=auth,
-        headers=headers,
-        timeout=timeout,
-        follow_redirects=follow_redirects,
-        transport=_SharedPool(),
-    )
-
-
-_TOOL_CACHE = CacheConfig(
-    store=KeyValueResponseCacheStore(),
-    partition="superset-service",
-    target_id="superset-mcp",
-)
-
-
-@asynccontextmanager
-async def create_tools(
-    superset_mcp_url: str,
-    superset_mcp_api_key: str | None = None,
-) -> AsyncGenerator[list[BaseTool], None]:
-    """Keep a run-scoped MCP session on a shared worker HTTP pool."""
-    transport = StreamableHttpTransport(
-        superset_mcp_url,
-        auth=superset_mcp_api_key,
-        httpx_client_factory=_http_client_factory,
-    )
-    client = FastMCPClient(transport, cache=_TOOL_CACHE)
-
-    async with MCPAdapter(client) as adapter:
-        yield await adapter.list_tools(cache_mode="use")
-
-
-McpProbeStatus = Literal["connected", "needs-auth", "failed"]
-
-
-class McpServerProbe(TypedDict):
-    status: McpProbeStatus
-    tools: list[str]
-
-
-_MCP_STATUS_TIMEOUT = httpx2.Timeout(5.0)
-
-
-def _status_http_client_factory(
-    headers: dict[str, str] | None = None,
-    timeout: httpx2.Timeout | None = None,
-    auth: httpx2.Auth | None = None,
-    follow_redirects: bool = False,
-) -> httpx2.AsyncClient:
-    """Create a short-lived client for MCP status probes."""
-    return _http_client_factory(
-        headers=headers,
-        timeout=_MCP_STATUS_TIMEOUT,
-        auth=auth,
-        follow_redirects=follow_redirects,
-    )
-
-
-async def probe_mcp_server(
-    superset_mcp_url: str,
-    superset_mcp_api_key: str | None = None,
-) -> McpServerProbe:
-    """Return the current MCP availability without exposing connection details."""
-    transport = StreamableHttpTransport(
-        superset_mcp_url,
-        auth=superset_mcp_api_key,
-        httpx_client_factory=_status_http_client_factory,
-    )
-
-    client = FastMCPClient(transport, cache=_TOOL_CACHE)
-
-    try:
-        async with MCPAdapter(client) as adapter:
-            tools = await adapter.list_tools(cache_mode="refresh")
-    except httpx2.HTTPStatusError as error:
-        if error.response.status_code in {401, 403}:
-            return {"status": "needs-auth", "tools": []}
-        return {"status": "failed", "tools": []}
-    except httpx2.RequestError:
-        return {"status": "failed", "tools": []}
-    # except Exception:
-    #     return {"status": "failed", "tools": []}
-
-    return {
-        "status": "connected",
-        "tools": [tool.name for tool in tools],
-    }
-
-
-async def close_shared_mcp_resources() -> None:
-    """Close the worker-wide HTTP pool during Aegra shutdown."""
-    await _HTTP_POOL.aclose()
-
+from agent.mcp.transport import http_client_factory
 
 ## Catalog discovery and caching
 
@@ -238,6 +109,8 @@ def parse_search_result(result: CallToolResult) -> list[object]:
 def _catalog_item(
     payload: object,
     source: Literal["base", "discovered"],
+    *,
+    server_id: McpServerId = "superset",
 ) -> McpToolCatalogItem:
     if not isinstance(payload, dict):
         raise CatalogError("mcp_catalog_unavailable")
@@ -252,9 +125,10 @@ def _catalog_item(
 
     return McpToolCatalogItem.model_validate(
         {
-            "name": name,
+            "name": f"{server_id}_{name}",
+            "raw_name": name,
             "description": "" if description is None else description,
-            "category": categorize_tool(name),
+            "category": categorize_tool(name) if server_id == "superset" else "General",
             "source": source,
             "input_schema": schema,
         }
@@ -296,12 +170,14 @@ def _normalize_error(error: Exception) -> CatalogError:
 async def _discover_catalog(
     url: str,
     api_key: str | None,
+    *,
+    server_id: McpServerId = "superset",
 ) -> McpToolCatalogResponse:
     try:
         transport = StreamableHttpTransport(
             url,
             auth=api_key,
-            httpx_client_factory=_http_client_factory,
+            httpx_client_factory=http_client_factory,
         )
         client = FastMCPClient(transport)
 
@@ -313,10 +189,11 @@ async def _discover_catalog(
                 item = _catalog_item(
                     tool.model_dump(mode="json", by_alias=True),
                     "base",
+                    server_id=server_id,
                 )
-                tools_by_name.setdefault(item.name, item)
+                tools_by_name.setdefault(item.raw_name, item)
 
-            if "search_tools" in tools_by_name:
+            if server_id == "superset" and "search_tools" in tools_by_name:
                 result = await client.call_tool_mcp(
                     "search_tools",
                     {"query": ""},
@@ -324,11 +201,12 @@ async def _discover_catalog(
 
                 for payload in parse_search_result(result):
                     # Validate duplicates too, so malformed results fail refresh.
-                    item = _catalog_item(payload, "discovered")
-                    tools_by_name.setdefault(item.name, item)
+                    item = _catalog_item(payload, "discovered", server_id=server_id)
+                    tools_by_name.setdefault(item.raw_name, item)
 
         # Publish metadata only after session cleanup succeeds.
         return McpToolCatalogResponse(
+            server_id=server_id,
             fetched_at=datetime.now(UTC),
             tools=sorted(
                 tools_by_name.values(),
@@ -355,12 +233,12 @@ class ToolCatalogCache:
     ) -> None:
         self._ttl_seconds = ttl_seconds
         self._clock = clock
-        self._entries: dict[tuple[str, str], _CacheEntry] = {}
-        self._locks: dict[tuple[str, str], asyncio.Lock] = {}
+        self._entries: dict[tuple[McpServerId, str, str], _CacheEntry] = {}
+        self._locks: dict[tuple[McpServerId, str, str], asyncio.Lock] = {}
 
     def _cached(
         self,
-        key: tuple[str, str],
+        key: tuple[McpServerId, str, str],
     ) -> McpToolCatalogResponse | None:
         entry = self._entries.get(key)
         if entry is None or self._clock() >= entry.expires_at:
@@ -372,11 +250,13 @@ class ToolCatalogCache:
         self,
         url: str,
         api_key: str | None,
+        *,
+        server_id: McpServerId = "superset",
     ) -> McpToolCatalogResponse:
         credential_hash = hashlib.sha256(
             json.dumps(api_key).encode("utf-8")
         ).hexdigest()
-        key = (url, credential_hash)
+        key = (server_id, url, credential_hash)
 
         cached = self._cached(key)
         if cached is not None:
@@ -388,7 +268,7 @@ class ToolCatalogCache:
             if cached is not None:
                 return cached
 
-            response = await _discover_catalog(url, api_key)
+            response = await _discover_catalog(url, api_key, server_id=server_id)
 
             self._entries[key] = _CacheEntry(
                 expires_at=self._clock() + self._ttl_seconds,

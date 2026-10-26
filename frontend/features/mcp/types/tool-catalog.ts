@@ -14,7 +14,7 @@ export type CatalogConnection = {
 };
 
 export type McpToolCatalogResponse = {
-  server_id: "superset";
+  server_id: "superset" | "openmetadata";
   fetched_at: string;
   tools: CatalogTool[];
 };

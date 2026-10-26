@@ -1,4 +1,4 @@
-"""Aegra-compatible LangChain agent with Apache Superset MCP tools."""
+"""Aegra-compatible LangChain agent with Superset and OpenMetadata MCP tools."""
 
 from __future__ import annotations
 
@@ -18,8 +18,8 @@ from langgraph.runtime import Runtime
 from langgraph_sdk.runtime import ServerRuntime
 
 from agent.config import AgentContext, AgentSettings
+from agent.mcp.client import create_tools
 from agent.prompts import SYSTEM_PROMPT
-from agent.tools import create_tools
 
 
 def create_chat_model(settings: AgentSettings) -> BaseChatModel:
@@ -47,7 +47,7 @@ def create_chat_model(settings: AgentSettings) -> BaseChatModel:
             base_url=settings.model_base_url,
             temperature=0,
         )
-    
+
     return ChatOpenRouter(
         model=settings.model_name,
         api_key=settings.model_api_key,
@@ -119,14 +119,7 @@ async def graph(
         yield build_agent(settings, [])
         return
 
-    async with create_tools(
-        settings.superset_mcp_url,
-        (
-            settings.superset_mcp_api_key.get_secret_value()
-            if settings.superset_mcp_api_key
-            else None
-        ),
-    ) as tools:
+    async with create_tools(settings.mcp_servers()) as tools:
         yield build_agent(settings, tools)
 
 
