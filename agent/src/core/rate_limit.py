@@ -7,6 +7,7 @@ slowapi with a Redis backend (storage_uri="redis://...").
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from src.core.settings import settings
+
+from core.settings import settings
 
 limiter = Limiter(key_func=get_remote_address, enabled=settings.rate_limit_enabled)

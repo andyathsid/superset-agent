@@ -10,6 +10,7 @@ class McpServerStatus(BaseModel):
     id: str
     name: str
     transport: str
+    url: str
     status: McpConnectionStatus
     tools: list[str]
     checked_at: datetime

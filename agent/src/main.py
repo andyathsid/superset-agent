@@ -2,14 +2,15 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+
 from agent.config import AgentSettings
 from agent.tools import close_shared_mcp_resources, probe_mcp_server
 from core.rate_limit import limiter
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
 from schemas.mcp import McpServerStatus, McpServerStatusResponse
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
 
 
 @asynccontextmanager
@@ -44,7 +45,6 @@ async def get_mcp_server_status() -> McpServerStatusResponse:
     """Return the latest safe-to-display status for configured MCP servers."""
     settings = AgentSettings.from_env()
 
-
     probe = await probe_mcp_server(
         settings.superset_mcp_url,
         (
@@ -63,6 +63,7 @@ async def get_mcp_server_status() -> McpServerStatusResponse:
                 id="superset",
                 name="Superset",
                 transport="HTTP",
+                url=settings.superset_mcp_url,
                 status=probe["status"],
                 tools=probe["tools"],
                 checked_at=checked_at,
