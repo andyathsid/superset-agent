@@ -2,15 +2,23 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
-from fastapi import FastAPI
+from agent.config import AgentSettings
+from agent.tools import (
+    CatalogError,
+    close_shared_mcp_resources,
+    probe_mcp_server,
+    tool_catalog_cache,
+)
+from core.rate_limit import limiter
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
+from schemas.mcp import (
+    McpServerStatus,
+    McpServerStatusResponse,
+    McpToolCatalogResponse,
+)
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-
-from agent.config import AgentSettings
-from agent.tools import close_shared_mcp_resources, probe_mcp_server
-from core.rate_limit import limiter
-from schemas.mcp import McpServerStatus, McpServerStatusResponse
 
 
 @asynccontextmanager
@@ -70,6 +78,33 @@ async def get_mcp_server_status() -> McpServerStatusResponse:
             )
         ],
     )
+
+
+@app.get(
+    "/mcp-servers/superset/tools",
+    response_model=McpToolCatalogResponse,
+)
+async def get_superset_tool_catalog() -> McpToolCatalogResponse:
+    settings = AgentSettings.from_env()
+    api_key = (
+        settings.superset_mcp_api_key.get_secret_value()
+        if settings.superset_mcp_api_key
+        else None
+    )
+
+    try:
+        return await tool_catalog_cache.get(
+            settings.superset_mcp_url,
+            api_key,
+        )
+    except CatalogError as error:
+        raise HTTPException(
+            status_code=error.status_code,
+            detail={
+                "code": error.code,
+                "message": error.message,
+            },
+        ) from None
 
 
 # # All auth endpoints live under /api/v1/auth (no JWT required).

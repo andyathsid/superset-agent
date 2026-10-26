@@ -33,10 +33,20 @@ export function Workspace({ children, defaultSidebarCollapsed }: WorkspaceProps)
         };
 
         return (
-          <AppSidebar collapsed={collapsed}>
-            <WorkspaceNavigation>
-              <AssistantNewThread onNavigate={handleAssistantNavigate} />
-            </WorkspaceNavigation>
+          <AppSidebar
+            collapsed={collapsed}
+            navigation={
+              <WorkspaceNavigation
+                collapsed={collapsed}
+                onToolsCatalogNavigate={() => {
+                  closeMobileSidebar();
+                  if (pathname !== "/tools-catalog") router.push("/tools-catalog");
+                }}
+              >
+                <AssistantNewThread collapsed={collapsed} onNavigate={handleAssistantNavigate} />
+              </WorkspaceNavigation>
+            }
+          >
             <Separator className="h-px w-full bg-sidebar-border" />
             <McpStatusSection collapsed={collapsed} />
             <Separator className="h-px w-full bg-sidebar-border" />

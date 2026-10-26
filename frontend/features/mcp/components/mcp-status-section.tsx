@@ -7,6 +7,7 @@ import {
   CollapsibleRoot,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useMcpServerStatus } from "../hooks/use-mcp-server-status";
 import type { McpServerStatus } from "../types/mcp-server";
@@ -52,6 +53,7 @@ export function McpStatusSection({ collapsed }: McpStatusSectionProps) {
         />
       </CollapsibleTrigger>
       <CollapsibleContent
+        aria-busy={isLoading}
         className="
           h-(--collapsible-panel-height) overflow-hidden opacity-100
           transition-[height,opacity] duration-200 ease-out
@@ -61,9 +63,24 @@ export function McpStatusSection({ collapsed }: McpStatusSectionProps) {
         "
       >
         {isLoading && (
-          <p role="status" className="text-muted-foreground px-3 py-2 text-xs">
-            Checking MCP connections…
-          </p>
+          <div role="status" className="px-0.5 pt-2">
+            <span className="sr-only">Checking MCP connections…</span>
+            <div
+              aria-hidden="true"
+              className="border-sidebar-border flex min-w-0 flex-col gap-3 rounded-xl border p-3 motion-reduce:[&_[data-slot=skeleton]]:animate-none"
+            >
+              <div className="flex min-w-0 items-center gap-2.5">
+                <Skeleton className="size-8 shrink-0 rounded-lg" />
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <Skeleton className="h-4 w-24 max-w-full" />
+                  <Skeleton className="h-3 w-full" />
+                </div>
+                <Skeleton className="size-1.5 shrink-0 rounded-full" />
+              </div>
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-3 w-3/4" />
+            </div>
+          </div>
         )}
         {error && (
           <p role="status" className="text-muted-foreground px-3 py-2 text-xs">

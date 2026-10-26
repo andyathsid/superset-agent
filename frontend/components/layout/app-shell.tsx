@@ -222,8 +222,8 @@ export const AppShell: FC<AppShellProps> = ({
 
         <div
           className={cn(
-            "relative flex min-h-0 flex-1 flex-col gap-0.5 p-3",
-            sidebarCollapsed ? "overflow-hidden" : "overflow-y-auto",
+            "relative flex min-h-0 flex-1 flex-col gap-0.5 transition-[padding] duration-200 motion-reduce:transition-none",
+            sidebarCollapsed ? "overflow-hidden px-2 pt-1 pb-3" : "overflow-y-auto p-3",
           )}
           style={{ width: sidebarWidth }}
         >
