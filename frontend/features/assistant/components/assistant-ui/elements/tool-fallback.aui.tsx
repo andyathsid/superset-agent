@@ -246,7 +246,7 @@ function ToolFallbackArgs({
   args,
   className,
   ...props
-}: React.ComponentProps<"div"> & {
+}: React.ComponentProps<typeof Collapsible> & {
   args?: unknown;
 }) {
   if (args === undefined) return null;
@@ -358,25 +358,28 @@ function ToolFallbackResult({
   result,
   className,
   ...props
-}: React.ComponentProps<"div"> & {
+}: React.ComponentProps<typeof Collapsible> & {
   result?: unknown;
 }) {
   if (result === undefined) return null;
 
   return (
-    <div
+    <Collapsible
       data-slot="tool-fallback-result"
-      className={cn("aui-tool-fallback-result", className)}
+      className={cn("aui-tool-fallback-result group/tool-result", className)}
       {...props}
     >
-      <p className="aui-tool-fallback-result-header text-muted-foreground text-xs font-medium">
-        Result:
-      </p>
-      <ToolFallbackValue
-        className="aui-tool-fallback-result-content mt-1 max-h-96"
-        value={normalizeToolResult(result)}
-      />
-    </div>
+      <CollapsibleTrigger className="aui-tool-fallback-result-header text-muted-foreground hover:text-foreground flex w-full items-center gap-1.5 text-xs font-medium transition-colors">
+        <ChevronDownIcon className="size-3 shrink-0 -rotate-90 transition-transform group-data-open/tool-result:rotate-0" />
+        Result
+      </CollapsibleTrigger>
+      <CollapsibleContent className="overflow-hidden">
+        <ToolFallbackValue
+          className="aui-tool-fallback-result-content mt-1.5 max-h-96"
+          value={normalizeToolResult(result)}
+        />
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -1288,12 +1291,17 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
     approval != null ||
     (isRequiresAction && offersInterruptAction(status, approval, interrupt));
 
-  const [open, setOpen] = useState(isRequiresAction);
-  const [prevRequiresAction, setPrevRequiresAction] =
-    useState(isRequiresAction);
-  if (isRequiresAction !== prevRequiresAction) {
-    setPrevRequiresAction(isRequiresAction);
-    if (isRequiresAction) setOpen(true);
+  const isRunning = status?.type === "running";
+  const statusType = status?.type;
+  const [open, setOpen] = useState(isRunning || isRequiresAction);
+  const [argsOpen, setArgsOpen] = useState(isRunning);
+  const [resultOpen, setResultOpen] = useState(isRunning);
+  const [previousStatus, setPreviousStatus] = useState(statusType);
+  if (statusType !== previousStatus) {
+    setPreviousStatus(statusType);
+    setOpen(isRunning || isRequiresAction);
+    setArgsOpen(isRunning);
+    setResultOpen(isRunning);
   }
   const approvalHadFocusRef = useRef(false);
   const approvalElementRef = useRef<HTMLDivElement | null>(null);
@@ -1332,6 +1340,8 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
         <ToolFallbackError status={status} />
         <ToolFallbackArgs
           args={presentation.args}
+          open={argsOpen}
+          onOpenChange={setArgsOpen}
           className={cn(isCancelled && "opacity-60")}
         />
         {shouldRenderApproval && (
@@ -1364,7 +1374,11 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
             }}
           />
         )}
-        <ToolFallbackResult result={result} />
+        <ToolFallbackResult
+          result={result}
+          open={resultOpen}
+          onOpenChange={setResultOpen}
+        />
       </ToolFallbackContent>
     </ToolFallbackRoot>
   );

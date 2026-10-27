@@ -724,7 +724,7 @@ const RunActivityReasoning: FC<{
   active: boolean;
   duration: number | undefined;
 }> = ({ index, active, duration }) => (
-  <ReasoningRoot streaming={active}>
+  <ReasoningRoot streaming={active} variant="ghost">
     <ReasoningTrigger active={active} duration={duration} />
     <ReasoningContent aria-busy={active}>
       <ReasoningText>
@@ -905,7 +905,7 @@ const AssistantMessage: FC = () => {
                 }
                 const running = part.status.type === "running";
                 return (
-                  <ReasoningRoot streaming={running}>
+                  <ReasoningRoot streaming={running} variant="ghost">
                     <ReasoningTrigger
                       active={running}
                       duration={reasoningDuration(part.timing)}
