@@ -4,19 +4,20 @@ import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { BookOpenIcon, FlaskConicalIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
 type WorkspaceNavigationProps = {
   children: ReactNode;
   collapsed: boolean;
   onToolsCatalogNavigate?: () => void;
+  onToolsPlaygroundNavigate?: () => void;
 };
 
 export function WorkspaceNavigation({
   children,
   collapsed,
   onToolsCatalogNavigate,
+  onToolsPlaygroundNavigate,
 }: WorkspaceNavigationProps) {
   const pathname = usePathname();
 
@@ -26,11 +27,7 @@ export function WorkspaceNavigation({
       return;
     }
     if (label === "Tools Playground") {
-      toast.add({
-        title: "Not Implemented",
-        description: "Sorry, this feature is not yet implemented.",
-        type: "info",
-      });
+      onToolsPlaygroundNavigate?.();
     }
   };
 
@@ -38,21 +35,17 @@ export function WorkspaceNavigation({
     <nav aria-label="Main menu" className="flex flex-col gap-0.5">
       {children}
       {[
-        { label: "Tools Catalog", icon: BookOpenIcon },
-        { label: "Tools Playground", icon: FlaskConicalIcon },
-      ].map(({ label, icon: Icon }) => (
+        { label: "Tools Catalog", icon: BookOpenIcon, href: "/tools-catalog" },
+        { label: "Tools Playground", icon: FlaskConicalIcon, href: "/tools-playground" },
+      ].map(({ label, icon: Icon, href }) => (
         <Button
           key={label}
           type="button"
           variant="ghost"
           aria-label={label}
           title={collapsed ? label : undefined}
-          data-active={
-            label === "Tools Catalog" && pathname === "/tools-catalog" ? "true" : undefined
-          }
-          aria-current={
-            label === "Tools Catalog" && pathname === "/tools-catalog" ? "page" : undefined
-          }
+          data-active={pathname === href ? "true" : undefined}
+          aria-current={pathname === href ? "page" : undefined}
           onClick={handleClick.bind(null, label)}
           className={cn(
             "hover:bg-muted data-active:bg-muted h-8 justify-start overflow-hidden rounded-md text-sm font-normal transition-[width,padding,gap] duration-200 motion-reduce:transition-none",

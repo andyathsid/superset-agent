@@ -45,6 +45,10 @@ export function Workspace({ children, defaultSidebarCollapsed }: WorkspaceProps)
                   closeMobileSidebar();
                   if (pathname !== "/tools-catalog") router.push("/tools-catalog");
                 }}
+                onToolsPlaygroundNavigate={() => {
+                  closeMobileSidebar();
+                  if (pathname !== "/tools-playground") router.push("/tools-playground");
+                }}
               >
                 <AssistantNewThread collapsed={collapsed} onNavigate={handleAssistantNavigate} />
               </WorkspaceNavigation>
