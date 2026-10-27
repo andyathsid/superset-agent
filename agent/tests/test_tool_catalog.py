@@ -38,6 +38,46 @@ def test_categories_preserve_priority(name: str, category: str) -> None:
     assert catalog.categorize_tool(name) == category
 
 
+@pytest.mark.parametrize(
+    ("name", "category"),
+    [
+        ("search_metadata", "Search & Discovery"),
+        ("semantic_search", "Search & Discovery"),
+        ("create_context_memory", "Context & Knowledge"),
+        ("find_context", "Context & Knowledge"),
+        ("get_asset_context", "Context & Knowledge"),
+        ("get_company_context", "Context & Knowledge"),
+        ("get_knowledge_content", "Context & Knowledge"),
+        ("get_persona_context", "Context & Knowledge"),
+        ("get_user_context", "Context & Knowledge"),
+        ("search_company_context", "Context & Knowledge"),
+        ("get_entity_details", "Metadata Management"),
+        ("patch_entity", "Metadata Management"),
+        ("create_classification", "Governance & Glossary"),
+        ("create_glossary", "Governance & Glossary"),
+        ("create_glossary_term", "Governance & Glossary"),
+        ("create_tag", "Governance & Glossary"),
+        ("create_domain", "Domains & Data Products"),
+        ("create_data_product", "Domains & Data Products"),
+        ("create_lineage", "Lineage"),
+        ("get_entity_lineage", "Lineage"),
+        ("create_test_case", "Data Quality"),
+        ("get_test_definitions", "Data Quality"),
+        ("root_cause_analysis", "Data Quality"),
+        ("create_metric", "Metrics"),
+        ("unknown_tool", "General"),
+        ("get_user_roles", "General"),
+    ],
+)
+def test_openmetadata_catalog_categories(name: str, category: str) -> None:
+    item = catalog._catalog_item(
+        {"name": name, "inputSchema": {}}, "base", server_id="openmetadata"
+    )
+    assert item.category == category
+    assert item.raw_name == name
+    assert item.name == f"openmetadata_{name}"
+
+
 @pytest.mark.parametrize("payload", [[], {"result": []}])
 def test_empty_structured_catalog(payload: object) -> None:
     result = CallToolResult(content=[], structured_content=payload)

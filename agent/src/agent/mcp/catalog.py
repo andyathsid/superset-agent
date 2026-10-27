@@ -49,7 +49,7 @@ class CatalogError(Exception):
         super().__init__(self.message)
 
 
-_CATEGORY_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
+_SUPERSET_CATEGORY_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
     (("dashboard",), "Dashboards"),
     (("chart", "explore"), "Charts"),
     (("dataset", "table", "metric", "dimension"), "Datasets"),
@@ -62,8 +62,39 @@ _CATEGORY_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
 )
 
 
-def categorize_tool(name: str) -> str:
-    for keywords, category in _CATEGORY_RULES:
+_OPENMETADATA_CATEGORIES: dict[str, str] = {
+    "search_metadata": "Search & Discovery",
+    "semantic_search": "Search & Discovery",
+    "create_context_memory": "Context & Knowledge",
+    "find_context": "Context & Knowledge",
+    "get_asset_context": "Context & Knowledge",
+    "get_company_context": "Context & Knowledge",
+    "get_knowledge_content": "Context & Knowledge",
+    "get_persona_context": "Context & Knowledge",
+    "get_user_context": "Context & Knowledge",
+    "search_company_context": "Context & Knowledge",
+    "get_entity_details": "Metadata Management",
+    "patch_entity": "Metadata Management",
+    "create_classification": "Governance & Glossary",
+    "create_glossary": "Governance & Glossary",
+    "create_glossary_term": "Governance & Glossary",
+    "create_tag": "Governance & Glossary",
+    "create_domain": "Domains & Data Products",
+    "create_data_product": "Domains & Data Products",
+    "create_lineage": "Lineage",
+    "get_entity_lineage": "Lineage",
+    "create_test_case": "Data Quality",
+    "get_test_definitions": "Data Quality",
+    "root_cause_analysis": "Data Quality",
+    "create_metric": "Metrics",
+}
+
+
+def categorize_tool(name: str, *, server_id: McpServerId = "superset") -> str:
+    if server_id == "openmetadata":
+        return _OPENMETADATA_CATEGORIES.get(name, "General")
+
+    for keywords, category in _SUPERSET_CATEGORY_RULES:
         if any(keyword in name for keyword in keywords):
             return category
     return "General"
@@ -128,7 +159,7 @@ def _catalog_item(
             "name": f"{server_id}_{name}",
             "raw_name": name,
             "description": "" if description is None else description,
-            "category": categorize_tool(name) if server_id == "superset" else "General",
+            "category": categorize_tool(name, server_id=server_id),
             "source": source,
             "input_schema": schema,
         }
