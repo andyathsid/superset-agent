@@ -2365,12 +2365,14 @@ source = { editable = "." }
 dependencies = [
     { name = "aegra-cli" },
     { name = "httpx2" },
+    { name = "jsonschema" },
     { name = "langchain", extra = ["mcp"] },
     { name = "langchain-anthropic" },
     { name = "langchain-ollama" },
     { name = "langchain-openai" },
     { name = "langchain-openrouter" },
     { name = "python-dotenv" },
+    { name = "referencing" },
     { name = "slowapi" },
 ]
 
@@ -2386,12 +2388,14 @@ dev = [
 requires-dist = [
     { name = "aegra-cli", specifier = ">=0.10.8" },
     { name = "httpx2", specifier = ">=2.13.1" },
+    { name = "jsonschema", specifier = ">=4.26.0" },
     { name = "langchain", extras = ["mcp"], specifier = ">=1.4.4" },
     { name = "langchain-anthropic", specifier = ">=1.7.6" },
     { name = "langchain-ollama", specifier = ">=1.1.0" },
     { name = "langchain-openai", specifier = ">=1.7.2" },
     { name = "langchain-openrouter", specifier = ">=0.2.9" },
     { name = "python-dotenv", specifier = ">=1.2.4" },
+    { name = "referencing", specifier = ">=0.37.0" },
     { name = "slowapi", specifier = ">=0.1.10" },
 ]
 

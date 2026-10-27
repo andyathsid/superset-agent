@@ -12,6 +12,8 @@ dependencies = [
     "langchain-openrouter>=0.2.9",
     "langchain-anthropic>=1.7.6",
     "langchain-ollama>=1.1.0",
+    "jsonschema>=4.26.0",
+    "referencing>=0.37.0",
 ]
 
 [build-system]

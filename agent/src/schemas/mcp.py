@@ -37,3 +37,19 @@ class McpToolCatalogResponse(BaseModel):
     server_id: McpServerId = "superset"
     fetched_at: datetime
     tools: list[McpToolCatalogItem]
+
+
+class McpToolExecutionRequest(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    tool_name: str = Field(min_length=1, pattern=r"\S")
+    arguments: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class McpToolExecutionResponse(BaseModel):
+    server_id: McpServerId
+    tool_name: str
+    duration_ms: int = Field(ge=0)
+    is_error: bool
+    content: list[dict[str, JsonValue]]
+    structured_content: dict[str, JsonValue] | None = None

@@ -1,5 +1,6 @@
 export type CatalogTool = {
   name: string;
+  raw_name: string;
   description: string;
   category: string;
   source: "base" | "discovered";

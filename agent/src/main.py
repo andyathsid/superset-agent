@@ -3,20 +3,24 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+
 from agent.config import AgentSettings
 from agent.mcp.catalog import CatalogError, tool_catalog_cache
 from agent.mcp.client import probe_mcp_server
+from agent.mcp.execution import ExecutionError, execute_tool
 from agent.mcp.transport import close_shared_mcp_resources
 from core.rate_limit import limiter
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
 from schemas.mcp import (
     McpServerStatus,
     McpServerStatusResponse,
     McpToolCatalogResponse,
+    McpToolExecutionRequest,
+    McpToolExecutionResponse,
 )
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
 
 
 @asynccontextmanager
@@ -100,6 +104,32 @@ async def get_tool_catalog(server_id: str) -> McpToolCatalogResponse:
                 "message": error.message,
             },
         ) from None
+
+
+@app.post(
+    "/mcp-servers/{server_id}/tools/execute",
+    response_model=McpToolExecutionResponse,
+)
+async def execute_mcp_tool(
+    server_id: str, request: McpToolExecutionRequest
+) -> McpToolExecutionResponse | JSONResponse:
+    settings = AgentSettings.from_env()
+    server = next(
+        (item for item in settings.mcp_servers() if item.id == server_id), None
+    )
+    if server is None:
+        return JSONResponse(
+            status_code=404, content={"detail": "MCP server is not configured."}
+        )
+    try:
+        return await execute_tool(server, request)
+    except (CatalogError, ExecutionError) as error:
+        # Aegra's HTTPException handler expects a string detail. Return the
+        # structured MCP error directly to preserve this endpoint's contract.
+        return JSONResponse(
+            status_code=error.status_code,
+            content={"detail": {"code": error.code, "message": error.message}},
+        )
 
 
 # # All auth endpoints live under /api/v1/auth (no JWT required).
