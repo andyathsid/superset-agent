@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Literal
+import asyncio
+from typing import Literal, Self
 
 import httpx2
 import pytest
@@ -41,7 +42,7 @@ async def test_create_tools_keeps_adapter_open_for_the_agent_run(monkeypatch) ->
             assert list(group.clients) == ["superset"]
             assert isinstance(group.clients["superset"], FakeClient)
 
-        async def __aenter__(self) -> FakeAdapter:
+        async def __aenter__(self) -> Self:
             events.append("adapter-entered")
             return self
 
@@ -141,35 +142,94 @@ async def test_prefixed_tools_call_the_original_server_and_name(
 
 
 @pytest.mark.asyncio
-async def test_second_server_failure_closes_first_session(monkeypatch) -> None:
+@pytest.mark.parametrize("failed_server", ["superset", "openmetadata", "both"])
+@pytest.mark.parametrize("failure_stage", ["connect", "list", "timeout"])
+async def test_unavailable_servers_do_not_block_healthy_tools(
+    monkeypatch, caplog, failed_server: str, failure_stage: str
+) -> None:
     events: list[str] = []
 
     class FakeClient:
         def __init__(self, url: str, *, cache: object) -> None:
             self.url = url
 
-        async def __aenter__(self):
-            if self.url == "https://metadata.example/mcp":
-                raise RuntimeError("Connection failed")
-            events.append("entered")
+    class FakeAdapter:
+        def __init__(self, group: ClientGroup) -> None:
+            self.server_id = next(iter(group.clients))
+            self.failed = failed_server in {self.server_id, "both"}
+
+        async def __aenter__(self) -> Self:
+            if self.failed and failure_stage == "connect":
+                raise RuntimeError("Connection failed: private-token")
+            events.append(f"{self.server_id}:entered")
             return self
 
         async def __aexit__(self, *args: object) -> None:
-            events.append("exited")
+            events.append(f"{self.server_id}:exited")
+
+        async def list_tools(self, *, cache_mode: str) -> list[StructuredTool]:
+            if self.failed:
+                if failure_stage == "timeout":
+                    await asyncio.Event().wait()
+                raise RuntimeError("Discovery failed: private-token")
+            return [
+                StructuredTool.from_function(
+                    lambda: "result",
+                    name=f"{self.server_id}_tool",
+                    description="Test",
+                )
+            ]
 
     monkeypatch.setattr(
         mcp_client, "StreamableHttpTransport", lambda url, **kwargs: url
     )
     monkeypatch.setattr(mcp_client, "FastMCPClient", FakeClient)
-    monkeypatch.setattr(mcp_client, "MCPAdapter", lambda group: group)
+    monkeypatch.setattr(mcp_client, "MCPAdapter", FakeAdapter)
+    monkeypatch.setattr(mcp_client, "_MCP_DISCOVERY_TIMEOUT_SECONDS", 0.01)
     servers = [
         McpServerConfig("superset", "Superset", "https://superset.example/mcp"),
         McpServerConfig("openmetadata", "OpenMetadata", "https://metadata.example/mcp"),
     ]
-    with pytest.raises(RuntimeError, match="Connection failed"):
-        async with mcp_client.create_tools(servers):
-            pytest.fail("Graph must not run with incomplete connections")
-    assert events == ["entered", "exited"]
+    healthy = [
+        server.id for server in servers if failed_server not in {server.id, "both"}
+    ]
+    async with mcp_client.create_tools(servers) as tools:
+        assert [tool.name for tool in tools] == [f"{name}_tool" for name in healthy]
+        for name in healthy:
+            assert f"{name}:entered" in events
+            assert f"{name}:exited" not in events
+        if failure_stage != "connect":
+            for server in servers:
+                if server.id not in healthy:
+                    assert f"{server.id}:exited" in events
+
+    for name in healthy:
+        assert f"{name}:exited" in events
+    assert "continuing" in caplog.text
+    assert "private-token" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_create_tools_does_not_swallow_run_errors() -> None:
+    async with mcp_client.create_tools([]) as tools:
+        assert tools == []
+
+    with pytest.raises(RuntimeError, match="Model failed"):
+        async with mcp_client.create_tools([]):
+            raise RuntimeError("Model failed")
+
+
+@pytest.mark.asyncio
+async def test_create_tools_preserves_cancellation(monkeypatch) -> None:
+    def cancelled_transport(*args, **kwargs):
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(mcp_client, "StreamableHttpTransport", cancelled_transport)
+    with pytest.raises(asyncio.CancelledError):
+        async with mcp_client.create_tools(
+            [McpServerConfig("superset", "Superset", "https://superset.example/mcp")]
+        ):
+            pytest.fail("Cancellation must stop discovery")
 
 
 def test_tool_cache_isolates_servers_urls_and_credentials() -> None:

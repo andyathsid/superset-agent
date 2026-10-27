@@ -1,11 +1,15 @@
 """Provider routing and credential-free response attribution."""
 
+import json
+from dataclasses import replace
 from typing import Any, cast
 
+import httpx
 import pytest
 from langchain.agents.middleware import AgentState
 from langchain.messages import AIMessage
 from langchain_anthropic import ChatAnthropic
+from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
 from langchain_openrouter import ChatOpenRouter
 from langgraph.runtime import Runtime
@@ -35,13 +39,45 @@ def settings(provider: str) -> AgentSettings:
         ("anthropic", ChatAnthropic),
         ("openrouter", ChatOpenRouter),
         ("openai", ChatOpenAI),
-        ("ollama", ChatOpenAI),
+        ("ollama", ChatOllama),
         ("custom", ChatOpenAI),
     ],
 )
 def test_selects_provider_adapter(provider: str, adapter: type) -> None:
     model = create_chat_model(settings(provider))
     assert isinstance(model, adapter)
+
+
+@pytest.mark.parametrize("suffix", ["", "/", "/v1", "/v1/"])
+def test_ollama_uses_native_chat_endpoint(
+    suffix: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fake_send(
+        client: httpx.Client, request: httpx.Request, **kwargs: Any
+    ) -> httpx.Response:
+        assert str(request.url) == "http://localhost:11434/api/chat"
+        payload = json.loads(request.content)
+        assert payload["model"] == "provider-model"
+        assert payload["options"]["temperature"] == 0
+        return httpx.Response(
+            200,
+            request=request,
+            json={
+                "model": "provider-model",
+                "message": {"role": "assistant", "content": "Hello"},
+                "done": True,
+            },
+        )
+
+    monkeypatch.setattr(httpx.Client, "send", fake_send)
+    model = create_chat_model(
+        replace(
+            settings("ollama"),
+            model_base_url=f"http://localhost:11434{suffix}",
+            model_api_key=SecretStr(""),
+        )
+    )
+    assert model.invoke("Hi", stream=False).content == "Hello"
 
 
 def test_response_attribution_preserves_message_and_excludes_key() -> None:

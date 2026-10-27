@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 from collections.abc import AsyncGenerator, Sequence
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Literal, TypedDict
 
 import httpx2
@@ -20,6 +21,9 @@ from agent.config import McpServerConfig
 from agent.mcp.transport import http_client_factory
 
 _TOOL_CACHE_STORE = KeyValueResponseCacheStore()
+_MCP_TOOL_CACHE_FALLBACK_TTL_MS = 60_000
+_MCP_DISCOVERY_TIMEOUT_SECONDS = 5.0
+logger = logging.getLogger(__name__)
 
 
 def _tool_cache(server: McpServerConfig) -> CacheConfig:
@@ -31,6 +35,9 @@ def _tool_cache(server: McpServerConfig) -> CacheConfig:
         store=_TOOL_CACHE_STORE,
         partition=identity,
         target_id=f"{server.id}-mcp",
+        # Use a short freshness window when the server provides no TTL.
+        # An explicit modern ttlMs=0 still disables caching.
+        default_ttl_ms=_MCP_TOOL_CACHE_FALLBACK_TTL_MS,
     )
 
 
@@ -38,20 +45,38 @@ def _tool_cache(server: McpServerConfig) -> CacheConfig:
 async def create_tools(
     servers: Sequence[McpServerConfig],
 ) -> AsyncGenerator[list[BaseTool], None]:
-    """Keep run-scoped MCP sessions on a shared worker HTTP pool."""
-    clients = {
-        server.id: FastMCPClient(
-            StreamableHttpTransport(
-                server.url,
-                auth=server.token.get_secret_value() if server.token else None,
-                httpx_client_factory=http_client_factory,
-            ),
-            cache=_tool_cache(server),
-        )
-        for server in servers
-    }
-    async with MCPAdapter(ClientGroup(clients)) as adapter:
-        yield await adapter.list_tools(cache_mode="use")
+    """Keep available MCP sessions open without making each server required."""
+    tools: list[BaseTool] = []
+    async with AsyncExitStack() as stack:
+        for server in servers:
+            server_stack = await stack.enter_async_context(AsyncExitStack())
+            try:
+                async with asyncio.timeout(_MCP_DISCOVERY_TIMEOUT_SECONDS):
+                    client = FastMCPClient(
+                        StreamableHttpTransport(
+                            server.url,
+                            auth=server.token.get_secret_value()
+                            if server.token
+                            else None,
+                            httpx_client_factory=http_client_factory,
+                        ),
+                        cache=_tool_cache(server),
+                    )
+                    adapter = await server_stack.enter_async_context(
+                        MCPAdapter(ClientGroup({server.id: client}))
+                    )
+                    server_tools = await adapter.list_tools(cache_mode="use")
+            except Exception as error:  # noqa: BLE001 - MCP discovery is optional.
+                await server_stack.aclose()
+                # Connection errors can contain URLs or credentials.
+                logger.warning(
+                    "MCP server %s unavailable during tool discovery (%s); continuing",
+                    server.id,
+                    type(error).__name__,
+                )
+            else:
+                tools.extend(server_tools)
+        yield tools
 
 
 McpProbeStatus = Literal["connected", "needs-auth", "failed"]

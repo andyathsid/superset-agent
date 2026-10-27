@@ -11,11 +11,14 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
-from agent import agent as agent_module
-from agent.config import AgentContext, AgentSettings, McpServerConfig
 from langchain.messages import AIMessage, ToolMessage
+from langchain_core.language_models.fake_chat_models import FakeChatModel
 from langgraph_sdk.runtime import ServerRuntime
 from pydantic import SecretStr
+
+from agent import agent as agent_module
+from agent.config import AgentContext, AgentSettings, McpServerConfig
+from agent.mcp import client as mcp_client
 
 _MAX_TOOL_CONTENT_CHARS = 800
 _e2e = pytest.mark.skipif(
@@ -121,6 +124,41 @@ async def test_graph_passes_configured_servers_and_keeps_tools_open(
         assert compiled == "compiled-agent"
         assert events == ["opened"]
     assert events == ["opened", "closed"]
+
+
+@pytest.mark.asyncio
+async def test_graph_answers_without_tools_when_all_mcp_servers_are_unavailable(
+    monkeypatch,
+) -> None:
+    def unavailable_transport(*args, **kwargs):
+        raise ConnectionError("MCP server is offline")
+
+    monkeypatch.setattr(mcp_client, "StreamableHttpTransport", unavailable_transport)
+    monkeypatch.setattr(
+        agent_module,
+        "create_chat_model",
+        lambda settings: FakeChatModel(),
+    )
+    runtime = cast(
+        ServerRuntime[AgentContext],
+        SimpleNamespace(
+            execution_runtime=SimpleNamespace(
+                context=AgentContext(
+                    model_name="test",
+                    model_provider="openai",
+                    model_base_url="https://model.example/v1",
+                    model_api_key="test-key",
+                )
+            )
+        ),
+    )
+    async with agent_module.graph(runtime) as compiled:
+        result = await compiled.ainvoke(
+            {"messages": [{"role": "user", "content": "Say hello without tools."}]}
+        )
+
+    assert result["messages"][-1].content == "fake response"
+    assert not any(isinstance(message, ToolMessage) for message in result["messages"])
 
 
 @_e2e

@@ -12,6 +12,7 @@ from langchain.agents.middleware import AgentMiddleware, AgentState
 from langchain.messages import AIMessage
 from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models import BaseChatModel
+from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
 from langchain_openrouter import ChatOpenRouter
 from langgraph.runtime import Runtime
@@ -24,6 +25,14 @@ from agent.prompts import SYSTEM_PROMPT
 
 def create_chat_model(settings: AgentSettings) -> BaseChatModel:
     """Create the provider adapter selected for this graph execution."""
+    if settings.model_provider == "ollama":
+        # Existing Ollama settings use the OpenAI-compatible /v1 endpoint.
+        base_url = settings.model_base_url.rstrip("/").removesuffix("/v1")
+        return ChatOllama(
+            model=settings.model_name,
+            base_url=base_url,
+            temperature=0,
+        )
     if settings.model_provider == "anthropic":
         return ChatAnthropic(
             model_name=settings.model_name,
