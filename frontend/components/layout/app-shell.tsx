@@ -47,6 +47,8 @@ type AppShellProps = {
   onMobileSidebarOpenChange?: ((value: boolean) => void) | undefined;
   headerContent?: ReactNode | undefined;
   headerActions?: ReactNode | undefined;
+  floatingActions?: ReactNode | undefined;
+  sidebarFooter?: ((controls: SidebarControls) => ReactNode) | undefined;
   sheetTitle?: ReactNode | undefined;
 };
 
@@ -62,6 +64,8 @@ export const AppShell: FC<AppShellProps> = ({
   onMobileSidebarOpenChange,
   headerContent,
   headerActions,
+  floatingActions,
+  sidebarFooter,
   sheetTitle,
 }) => {
   const [internalCollapsed, setInternalCollapsed] = useState(defaultCollapsed);
@@ -229,6 +233,11 @@ export const AppShell: FC<AppShellProps> = ({
         >
           {sidebar({ collapsed: sidebarCollapsed, closeMobileSidebar })}
         </div>
+        {sidebarFooter && (
+          <div className="shrink-0 p-2 text-center items-center xl:hidden ">
+            {sidebarFooter({ collapsed: sidebarCollapsed, closeMobileSidebar })}
+          </div>
+        )}
       </aside>
 
       <div
@@ -267,19 +276,27 @@ export const AppShell: FC<AppShellProps> = ({
           <SheetTitle className="flex h-12 shrink-0 items-center px-4 text-sm font-medium">
             {sheetTitle ?? title}
           </SheetTitle>
-          <div className="relative flex flex-1 flex-col gap-0.5 overflow-y-auto p-3">
+          <div className="relative flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-3">
             {sidebar({ collapsed: false, closeMobileSidebar })}
           </div>
+          {sidebarFooter && (
+            <div className="shrink-0 p-3">
+              {sidebarFooter({ collapsed: false, closeMobileSidebar })}
+            </div>
+          )}
         </SheetContent>
       </Sheet>
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
         {headerActions && (
           <header className="flex h-12 shrink-0 items-center justify-end px-3 pl-12 md:px-4">
             {headerActions}
           </header>
         )}
         <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+        {floatingActions && (
+          <div className="absolute top-3 right-4 z-10 hidden xl:flex">{floatingActions}</div>
+        )}
       </div>
     </div>
   );

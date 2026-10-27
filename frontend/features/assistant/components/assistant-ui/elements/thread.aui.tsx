@@ -270,7 +270,7 @@ const ThreadRoot: FC<{
       >
         <div
           className={cn(
-            "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4",
+            "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-2 pt-4",
             isEmpty && "justify-center",
           )}
         >

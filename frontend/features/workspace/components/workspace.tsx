@@ -9,6 +9,7 @@ import { AssistantNewThread } from "@/features/assistant/components/assistant-ne
 import { AssistantThreadsSection } from "@/features/assistant/components/assistant-threads-section";
 import { McpStatusSection } from "@/features/mcp/components/mcp-status-section";
 import { WorkspaceNavigation } from "./workspace-navigation";
+import { ThemeToggle } from "./theme-toggle";
 import { writeClientCookie } from "@/lib/cookies/client";
 import { sidebarCollapsedCookie } from "../lib/sidebar-cookie";
 
@@ -26,6 +27,8 @@ export function Workspace({ children, defaultSidebarCollapsed }: WorkspaceProps)
       title="Core Data Management"
       defaultCollapsed={defaultSidebarCollapsed}
       onCollapsedChange={(collapsed) => writeClientCookie(sidebarCollapsedCookie, collapsed)}
+      floatingActions={<ThemeToggle />}
+      sidebarFooter={({ collapsed }) => <ThemeToggle showLabel={!collapsed} />}
       sidebar={({ collapsed, closeMobileSidebar }) => {
         const handleAssistantNavigate = () => {
           closeMobileSidebar();
