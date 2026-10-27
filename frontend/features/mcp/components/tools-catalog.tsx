@@ -1,14 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  BookOpenIcon,
-  ChartColumnIcon,
-  ChevronDownIcon,
-  DatabaseIcon,
-  SearchIcon,
-  XIcon,
-} from "lucide-react";
+import { BookOpenIcon, ChevronDownIcon, PlugIcon, SearchIcon, XIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { OpenMetadataLogo, SupersetLogo } from "@/features/workspace/components/logos";
 import { useMcpServerStatus } from "../hooks/use-mcp-server-status";
 import { useToolCatalog } from "../hooks/use-tool-catalog";
 import type { McpServer } from "../types/mcp-server";
@@ -224,7 +218,12 @@ function ConnectionCatalog({
         first.category.localeCompare(second.category, "en") ||
         first.name.localeCompare(second.name, "en"),
     );
-  const Icon = connection.server_id === "superset" ? ChartColumnIcon : DatabaseIcon;
+  const Icon =
+    connection.server_id === "superset"
+      ? SupersetLogo
+      : connection.server_id === "openmetadata"
+        ? OpenMetadataLogo
+        : PlugIcon;
   const resetFilters = () => {
     setCategory("All");
     setSearch("");
@@ -237,9 +236,9 @@ function ConnectionCatalog({
       render={<section aria-label={`${connection.name} tools`} />}
     >
       <h2>
-        <CollapsibleTrigger className="group/connection flex w-full items-center gap-3 rounded-xl p-4 text-left outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50 md:p-5 [&_svg]:size-4 [&_svg]:shrink-0">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-muted/50">
-            <Icon aria-hidden />
+        <CollapsibleTrigger className="group/connection flex w-full items-center gap-3 rounded-xl p-4 text-left outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50 md:p-5 [&_svg]:shrink-0">
+          <span className="text-foreground flex size-10 shrink-0 items-center justify-center rounded-lg border bg-muted/50">
+            <Icon aria-hidden className="size-7" />
           </span>
           <span className="flex min-w-0 flex-1 flex-col gap-1">
             <span className="font-medium">{connection.name}</span>
@@ -252,7 +251,7 @@ function ConnectionCatalog({
           </Badge>
           <ChevronDownIcon
             aria-hidden
-            className="transition-transform group-aria-expanded/connection:rotate-180 motion-reduce:transition-none"
+            className="size-4 transition-transform group-aria-expanded/connection:rotate-180 motion-reduce:transition-none"
           />
         </CollapsibleTrigger>
       </h2>

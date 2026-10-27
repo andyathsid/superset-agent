@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { ChartColumnIcon, ChevronDownIcon, DatabaseIcon, PlugIcon } from "lucide-react";
+import { ChevronDownIcon, PlugIcon } from "lucide-react";
 import {
   CollapsibleContent,
   CollapsibleRoot,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
+import { OpenMetadataLogo, SupersetLogo } from "@/features/workspace/components/logos";
 import { cn } from "@/lib/utils";
 import { useMcpServerStatus } from "../hooks/use-mcp-server-status";
 import type { McpServerStatus } from "../types/mcp-server";
@@ -77,7 +78,7 @@ export function McpStatusSection({ collapsed }: McpStatusSectionProps) {
               aria-hidden="true"
               className="flex min-w-0 items-center gap-2.5 px-2.5 py-2 motion-reduce:[&_[data-slot=skeleton]]:animate-none"
             >
-              <Skeleton className="size-4 shrink-0 rounded" />
+              <Skeleton className="size-5 shrink-0 rounded" />
               <div className="flex min-w-0 flex-1 flex-col gap-2">
                 <Skeleton className="h-3 w-24 max-w-full" />
                 <Skeleton className="h-2.5 w-full" />
@@ -97,12 +98,16 @@ export function McpStatusSection({ collapsed }: McpStatusSectionProps) {
         <ul className="flex min-w-0 flex-col gap-0.5 pt-1">
           {orderedServers.map(({ id, name, url, tools, transport, status, checkedAt }) => {
             const Icon =
-              id === "superset" ? ChartColumnIcon : id === "openmetadata" ? DatabaseIcon : PlugIcon;
+              id === "superset"
+                ? SupersetLogo
+                : id === "openmetadata"
+                  ? OpenMetadataLogo
+                  : PlugIcon;
             return (
               <CollapsibleRoot key={id} render={<li />} className="min-w-0 rounded-lg">
-                <CollapsibleTrigger className="group/mcp-server hover:bg-muted/50 grid w-full min-w-0 grid-cols-[1rem_minmax(0,1fr)_0.75rem] items-center gap-x-2.5 gap-y-0.5 rounded-lg px-2.5 py-2 text-left outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none [&_svg]:shrink-0">
-                  <span className="text-muted-foreground flex size-4 shrink-0 items-center justify-center [&_svg]:size-4">
-                    <Icon aria-hidden />
+                <CollapsibleTrigger className="group/mcp-server hover:bg-muted/50 grid w-full min-w-0 grid-cols-[1.25rem_minmax(0,1fr)_0.75rem] items-center gap-x-2.5 gap-y-0.5 rounded-lg px-2.5 py-2 text-left outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none [&_svg]:shrink-0">
+                  <span className="text-foreground flex size-5 shrink-0 items-center justify-center">
+                    <Icon aria-hidden className="size-5" />
                   </span>
                   <span className="truncate text-xs leading-4 font-medium">{name}</span>
                   <ChevronDownIcon
