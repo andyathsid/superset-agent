@@ -53,6 +53,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
+import { getClipboardErrorDescription } from "@/lib/clipboard";
 import { useMcpServerStatus } from "../hooks/use-mcp-server-status";
 import { useToolCatalog } from "../hooks/use-tool-catalog";
 import { useToolExecution } from "../hooks/use-tool-execution";
@@ -333,7 +334,7 @@ function ToolRunner({
     } catch {
       toast.add({
         title: "Couldn't copy the result",
-        description: "Select and copy the result manually.",
+        description: getClipboardErrorDescription("Select and copy the result manually."),
         type: "error",
       });
     }

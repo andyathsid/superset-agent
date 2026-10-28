@@ -29,8 +29,11 @@ import {
 } from "@/features/assistant/components/assistant-ui/elements/run-activity";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "@/components/ui/toast";
 import { ThreadModelError, useThreadModels } from "../../model-thread-provider";
+import { getClipboardErrorDescription } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
+import { useActionBarCopy } from "@assistant-ui/core/react";
 import {
   ActionBarMorePrimitive,
   ActionBarPrimitive,
@@ -410,6 +413,39 @@ const SpokenMessage: FC = () => {
   );
 };
 
+const ThreadCopyButton: FC<{ className?: string }> = ({ className }) => {
+  const { copy, disabled, isCopied } = useActionBarCopy({
+    copyToClipboard: async (text) => {
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (error) {
+        toast.add({
+          title: "Couldn't copy the message",
+          description: getClipboardErrorDescription("Select and copy the message manually."),
+          type: "error",
+        });
+        throw error;
+      }
+    },
+  });
+
+  return (
+    <TooltipIconButton
+      tooltip="Copy"
+      className={className}
+      disabled={disabled}
+      onClick={copy}
+      data-copied={isCopied ? "true" : undefined}
+    >
+      {isCopied ? (
+        <CheckIcon className="animate-in zoom-in-50 fade-in duration-200 ease-out" />
+      ) : (
+        <CopyIcon className="animate-in zoom-in-75 fade-in duration-150" />
+      )}
+    </TooltipIconButton>
+  );
+};
+
 const SpokenActionBar: FC = () => {
   return (
     <ActionBarPrimitive.Root
@@ -417,16 +453,7 @@ const SpokenActionBar: FC = () => {
       autohide="always"
       className="aui-spoken-action-bar text-muted-foreground flex shrink-0 gap-1"
     >
-      <ActionBarPrimitive.Copy
-        render={<TooltipIconButton tooltip="Copy" className="size-6" />}
-      >
-        <AuiIf condition={(s) => s.message.isCopied}>
-          <CheckIcon className="animate-in zoom-in-50 fade-in duration-200 ease-out" />
-        </AuiIf>
-        <AuiIf condition={(s) => !s.message.isCopied}>
-          <CopyIcon className="animate-in zoom-in-75 fade-in duration-150" />
-        </AuiIf>
-      </ActionBarPrimitive.Copy>
+      <ThreadCopyButton className="size-6" />
     </ActionBarPrimitive.Root>
   );
 };
@@ -974,14 +1001,7 @@ const AssistantActionBar: FC = () => {
       autohide="not-last"
       className="aui-assistant-action-bar-root text-muted-foreground animate-in fade-in col-start-3 row-start-2 -ms-1 flex gap-1 duration-200"
     >
-      <ActionBarPrimitive.Copy render={<TooltipIconButton tooltip="Copy" />}>
-        <AuiIf condition={(s) => s.message.isCopied}>
-          <CheckIcon className="animate-in zoom-in-50 fade-in duration-200 ease-out" />
-        </AuiIf>
-        <AuiIf condition={(s) => !s.message.isCopied}>
-          <CopyIcon className="animate-in zoom-in-75 fade-in duration-150" />
-        </AuiIf>
-      </ActionBarPrimitive.Copy>
+      <ThreadCopyButton />
       <AuiIf condition={(s) => s.thread.capabilities.feedback}>
         <ActionBarPrimitive.FeedbackPositive
           render={
