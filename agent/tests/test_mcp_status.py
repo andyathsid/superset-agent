@@ -19,7 +19,9 @@ from __future__ import annotations
 
 import asyncio
 import os
+from datetime import UTC, datetime
 from typing import Any
+from unittest.mock import AsyncMock
 
 import httpx2
 import pytest
@@ -29,6 +31,7 @@ import main
 from agent.config import McpServerConfig
 from agent.mcp import client as mcp_client
 from agent.mcp.client import McpProbeStatus, McpServerProbe
+from schemas.mcp import McpToolCatalogItem, McpToolCatalogResponse
 
 _agent_url = os.getenv("AGENT_URL", "http://localhost:2026").rstrip("/")
 _e2e = pytest.mark.skipif(
@@ -52,12 +55,34 @@ def status_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENMETADATA_TOKEN", raising=False)
 
 
+@pytest.fixture
+def catalog_get(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+    catalog = McpToolCatalogResponse(
+        fetched_at=datetime.now(UTC),
+        tools=[
+            McpToolCatalogItem(
+                name=f"superset_tool_{index}",
+                raw_name=f"tool_{index}",
+                description="",
+                category="General",
+                source="base" if index < 4 else "discovered",
+                input_schema={},
+            )
+            for index in range(70)
+        ],
+    )
+    mock = AsyncMock(return_value=catalog)
+    monkeypatch.setattr(main.tool_catalog_cache, "get", mock)
+    return mock
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status", ["connected", "needs-auth", "failed"])
 async def test_status_reports_configured_url_and_probe_result(
     monkeypatch: pytest.MonkeyPatch,
     status: McpProbeStatus,
     status_settings: None,
+    catalog_get: AsyncMock,
 ) -> None:
     probe_result: McpServerProbe = {
         "status": status,
@@ -78,6 +103,13 @@ async def test_status_reports_configured_url_and_probe_result(
     assert server.url == "https://superset.example/mcp"
     assert server.status == status
     assert server.tools == probe_result["tools"]
+    assert server.tool_count == (70 if status == "connected" else None)
+    if status == "connected":
+        catalog_get.assert_awaited_once_with(
+            "https://superset.example/mcp", "mcp-secret", server_id="superset"
+        )
+    else:
+        catalog_get.assert_not_awaited()
     assert server.checked_at == response.checked_at
     assert "mcp-secret" not in response.model_dump_json()
     assert "model-secret" not in response.model_dump_json()
@@ -89,6 +121,7 @@ async def test_status_reports_servers_independently(
     monkeypatch: pytest.MonkeyPatch,
     status_settings: None,
     failed_id: str | None,
+    catalog_get: AsyncMock,
 ) -> None:
     monkeypatch.setenv("OPENMETADATA_MCP_URL", "https://metadata.example/mcp")
     monkeypatch.setenv("OPENMETADATA_TOKEN", "metadata-secret")
@@ -120,10 +153,63 @@ async def test_status_reports_servers_independently(
             [] if server["id"] == failed_id else [f"{server['id']}_search"]
         )
         assert server["checked_at"] == body["checked_at"]
+        assert server["tool_count"] == (None if server["id"] == failed_id else 70)
+    assert catalog_get.await_count == (2 if failed_id is None else 1)
     assert body["servers"][1]["name"] == "OpenMetadata"
     assert body["servers"][1]["url"] == "https://metadata.example/mcp"
     for secret in ("metadata-secret", "mcp-secret", "model-secret"):
         assert secret not in response.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["catalog", "timeout", "deadline", "empty"])
+async def test_status_keeps_connection_when_catalog_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+    status_settings: None,
+    catalog_get: AsyncMock,
+    failure: str,
+) -> None:
+    monkeypatch.setattr(
+        main,
+        "probe_mcp_server",
+        AsyncMock(
+            return_value={"status": "connected", "tools": ["superset_search_tools"]}
+        ),
+    )
+    expiry: asyncio.Task[None] | None = None
+    if failure == "catalog":
+        catalog_get.side_effect = main.CatalogError("mcp_catalog_unavailable")
+    elif failure == "timeout":
+        catalog_get.side_effect = TimeoutError
+    elif failure == "deadline":
+        started = asyncio.Event()
+
+        async def stalled_catalog(*args: Any, **kwargs: Any) -> None:
+            started.set()
+            await asyncio.Event().wait()
+
+        catalog_get.side_effect = stalled_catalog
+        # Expire the actual timeout after discovery starts, without a five-second wait.
+        timeout = asyncio.timeout(None)
+        monkeypatch.setattr(main.asyncio, "timeout", lambda seconds: timeout)
+
+        async def expire_catalog() -> None:
+            await started.wait()
+            timeout.reschedule(asyncio.get_running_loop().time())
+
+        expiry = asyncio.create_task(expire_catalog())
+    else:
+        catalog_get.return_value = McpToolCatalogResponse(
+            fetched_at=datetime.now(UTC), tools=[]
+        )
+
+    response = await main.get_mcp_server_status()
+    if expiry is not None:
+        await expiry
+    server = response.servers[0]
+    assert server.status == "connected"
+    assert server.tools == ["superset_search_tools"]
+    assert server.tool_count == (0 if failure == "empty" else None)
 
 
 def http_error(code: int) -> httpx2.HTTPStatusError:

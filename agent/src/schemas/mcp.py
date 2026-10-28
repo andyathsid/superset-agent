@@ -14,6 +14,7 @@ class McpServerStatus(BaseModel):
     url: str
     status: McpConnectionStatus
     tools: list[str]
+    tool_count: int | None = Field(default=None, ge=0)
     checked_at: datetime
 
 

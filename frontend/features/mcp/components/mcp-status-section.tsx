@@ -96,7 +96,7 @@ export function McpStatusSection({ collapsed }: McpStatusSectionProps) {
           <p className="text-muted-foreground px-3 py-2 text-xs">No MCP servers configured.</p>
         )}
         <ul className="flex min-w-0 flex-col gap-0.5 pt-1">
-          {orderedServers.map(({ id, name, url, tools, transport, status, checkedAt }) => {
+          {orderedServers.map(({ id, name, url, tool_count, transport, status, checkedAt }) => {
             const Icon =
               id === "superset"
                 ? SupersetLogo
@@ -126,7 +126,9 @@ export function McpStatusSection({ collapsed }: McpStatusSectionProps) {
                     <span aria-hidden>·</span>
                     <span>{transport}</span>
                     <span aria-hidden>·</span>
-                    <span className="whitespace-nowrap">{tools.length} tools</span>
+                    <span className="whitespace-nowrap">
+                      {tool_count == null ? "Tools unavailable" : `${tool_count} tools`}
+                    </span>
                   </span>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="h-(--collapsible-panel-height) overflow-hidden opacity-100 transition-[height,opacity] duration-200 ease-out data-[starting-style]:h-0 data-[starting-style]:opacity-0 data-[ending-style]:h-0 data-[ending-style]:opacity-0 motion-reduce:transition-none">

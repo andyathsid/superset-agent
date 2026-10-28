@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from agent.config import AgentSettings
+from agent.config import AgentSettings, McpServerConfig
 from agent.mcp.catalog import CatalogError, tool_catalog_cache
 from agent.mcp.client import probe_mcp_server
 from agent.mcp.execution import ExecutionError, execute_tool
@@ -57,6 +57,12 @@ async def get_mcp_server_status() -> McpServerStatusResponse:
 
     servers = settings.mcp_servers()
     probes = await asyncio.gather(*(probe_mcp_server(server) for server in servers))
+    tool_counts = await asyncio.gather(
+        *(
+            _catalog_tool_count(server, probe["status"] == "connected")
+            for server, probe in zip(servers, probes, strict=True)
+        )
+    )
 
     checked_at = datetime.now(UTC)
 
@@ -70,11 +76,31 @@ async def get_mcp_server_status() -> McpServerStatusResponse:
                 url=server.url,
                 status=probe["status"],
                 tools=probe["tools"],
+                tool_count=tool_count,
                 checked_at=checked_at,
             )
-            for server, probe in zip(servers, probes, strict=True)
+            for server, probe, tool_count in zip(
+                servers, probes, tool_counts, strict=True
+            )
         ],
     )
+
+
+async def _catalog_tool_count(server: McpServerConfig, connected: bool) -> int | None:
+    if not connected:
+        return None
+
+    api_key = server.token.get_secret_value() if server.token else None
+    try:
+        async with asyncio.timeout(5.0):
+            catalog = await tool_catalog_cache.get(
+                server.url,
+                api_key,
+                server_id=server.id,
+            )
+    except (CatalogError, TimeoutError):
+        return None
+    return len(catalog.tools)
 
 
 @app.get(

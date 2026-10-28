@@ -7,5 +7,6 @@ export interface McpServer {
   url: string;
   status: McpServerStatus;
   tools: readonly string[];
+  tool_count: number | null;
   checkedAt?: string;
 }
